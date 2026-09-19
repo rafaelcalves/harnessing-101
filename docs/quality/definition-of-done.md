@@ -41,7 +41,7 @@ Derived from `docs/PROJECT-PLAN.md` phase descriptions. Where the plan's one-lin
 | --- | --- | --- |
 | **0** | `CONTRIBUTING.md`, licence, conduct, templates, CI, commit-identity guard, accepted stack ADR, threat-model baseline; plan updated to match ADR | "Stranger could contribute" is subjective; Kevin/Ryan artefacts in flight |
 | **1** | See **Phase 1 exit (revised 2026-09-19)** below — Stanley H101-25 adds composition boundary, CI allowlist, and assembly authorization tests before phase acceptance | Was: port APIs + unit tests only; H101-19 containment moved in from Phase 2 |
-| **2** | See **Phase 2 exit (revised 2026-09-19)** below — CLI §2 walkthrough, restart-after-crash, shared adapter contract (H101-40), mailbox (H101-22), disclosure (H101-16), stale-lock (H101-20), Phase 3 `Unsupported`, inherited containment | Was: one sentence; obligations H101-16/20/22 were undated in the table |
+| **2** | See **Phase 2 exit (revised 2026-09-19)** below — CLI §2 walkthrough, restart-after-crash, shared adapter contract ([ADR 0003](../adr/0003-ui-adapter-contract.md) UI-01–08 / H101-40), mailbox (H101-22), disclosure (H101-16), stale-lock (H101-20), Phase 3 `Unsupported`, inherited containment | Was: one sentence; obligations H101-16/20/22 were undated in the table |
 | **3** | Start/stop/budget/crash-recovery on supported platforms; process-tree termination; misbehaviour → `RecoveryRequired` | Platform matrix **UNKNOWN** (`boundaries.md` line 65) |
 | **4** | Clean-machine install, observed egress audit, new-joiner docs, version tag | Needs written observation protocol |
 
@@ -60,7 +60,7 @@ Phase 1 is **not accepted** until all of the following pass in CI on `main`:
 
 ### Phase 2 exit (revised 2026-09-19, per H101-39)
 
-Phase 2 is **not accepted** until all of the following pass in CI on `main`. Items inherit Phase 1 limits recorded in [`docs/PHASE-1-MILESTONE.md`](../PHASE-1-MILESTONE.md): the import allowlist gate stays green; no unapproved package imports the store; the forbidden fixture must fail the check (exit code **1** once H101-34 lands); CLI and adapter code reach persistence only through `host.Open` / returned `Capabilities`, not direct `StateStore` construction.
+Phase 2 is **not accepted** until all of the following pass in CI on `main`. Items inherit Phase 1 limits recorded in [`docs/PHASE-1-MILESTONE.md`](../PHASE-1-MILESTONE.md): the import allowlist gate stays green; no unapproved package imports the store; the forbidden fixture must fail the check (exit code **1** once H101-34 lands); presentation adapters reach persistence only through reviewed assembly (`host.Open` → caller-bound **FrontendSession**, per [ADR 0003](../adr/0003-ui-adapter-contract.md)), not direct `StateStore` / `Capabilities` injection.
 
 **Obligation placement (H101-16, H101-22, H101-20):** all three are **Phase 2 exit**, not Phase 3. Phase 3 is process supervision; mailbox ordering, first-run disclosure, and workspace lock recovery are prerequisites for a usable CLI and the §2 restart milestone, not for starting agents.
 
@@ -68,21 +68,21 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 | --- | --- | --- |
 | 1 | CLI product cycle (§2 walkthrough) | **No** — needs `cmd/harnessing` and a CI subprocess test |
 | 2 | Restart after crash | **No** — needs H101-20 recovery (or documented manual procedure exercised in test) plus CLI reopen |
-| 3 | Swappability (shared contract) | **No** — needs H101-40 contract package and throwaway adapter |
-| 4 | Containment preserved | **Partially** — allowlist + forbidden fixture exist; `cmd/harnessing` must stay off the store-import allowlist once added |
+| 3 | Swappability (ADR 0003 UI-01–08) | **No** — needs `internal/adaptercontract` suite, FrontendSession, throwaway adapter |
+| 4 | Containment preserved | **Partially** — store half satisfied (`24a2022`); UI import allowlist (no host from presentation) not yet enforced |
 | 5 | Mailbox adapter (H101-22) | **No** — needs file mailbox wired to delivery-fact recorders |
 | 6 | First-run disclosure (H101-16) | **Partially** — README disclosure present; in-product first-run line needs CLI test |
 | 7 | Phase 3 ops `Unsupported` | **No** — needs Capabilities/CLI surface and explicit `Unsupported` assertions |
-| 8 | Zero network (CLI tree) | **Partially** — core already proven; extend `go list -deps` to `cmd/harnessing` when it exists |
+| 8 | Zero network (CLI tree) | **Satisfied** — `go list -deps ./cmd/harnessing` finds no `net`/`net/http` (`24a2022`) |
 | 9 | Test layering | **N/A** — policy; enforced by review |
 
 1. **CLI product cycle (§2 walkthrough)** — A CI-runnable script or `go test` drives the **minimum useful product** in [`docs/product/definition.md`](../product/definition.md) §2 exclusively through the shipped `harnessing` command (subprocess, not in-process `host` import from the test package): create/open workspace; register ≥2 named agents; create a task with one accountable owner; task-linked handoff with explicit acknowledgement; report a blocker and resolve it; report a result; human reject then accept a replacement result; status queries show assigned / in-progress / blocked / awaiting-review with reporter identity; close the CLI; reopen; assert durable records without resending work. **This item is what “usable for real work” means** — not a subjective judgment.
 
-2. **Restart after crash** — After the cycle in item 1, simulate an unclean host exit (`kill -9` or equivalent) without `Close`; a subsequent `harnessing` invocation must reopen the same workspace and recover the persisted cycle state. **Blocked until H101-20** delivers stale-lock recovery **or** a documented, tested manual `.lock` removal procedure is exercised in CI. Inherited from Phase 1 limits; not deferrable to Phase 3.
+2. **Restart after crash** — After the cycle in item 1, simulate an unclean host exit (`kill -9` or equivalent) without `Close`; a subsequent `harnessing` invocation must reopen the same workspace and recover the persisted cycle state. **Blocked until H101-20** delivers stale-lock recovery **or** a documented, tested manual `.lock` removal procedure is exercised in CI. Graceful reopen alone does **not** discharge this item (ADR 0003 UI-07). Inherited from Phase 1 limits; not deferrable to Phase 3.
 
-3. **Swappability (shared adapter contract)** — Stanley's **H101-40** adapter contract defines one shared integration test suite (product cycle assertions, assembly authorization negatives, publish-without-ack then explicit ack, restart durability, idempotent replay). **Both** the CLI adapter and a throwaway scripted adapter (no CLI imports) must pass that suite unchanged through `host.Capabilities` only. The core must import neither adapter. This item does **not** duplicate the contract's test list — it requires both adapters to pass the same suite; the suite's contents live in H101-40 / `boundaries.md` Phase 2 proof scenario.
+3. **Swappability (shared adapter contract)** — [ADR 0003](../adr/0003-ui-adapter-contract.md) (H101-40) defines behavioral scenarios **UI-01 through UI-08**; this item requires both adapters to pass them in CI, not reproduce the architecture here. The shared black-box suite lives in `internal/adaptercontract/contract_test.go`; each adapter enters through its **real** input driver (CLI argv/stdin/structured output; throwaway independent handler — no CLI imports, no shared dispatch). Observations come through the caller-bound **FrontendSession** surface (not raw `Capabilities` injection). Suite includes per-adapter isolated workspaces, cross-adapter continuation (A writes, B reads/acks/reviews), and concurrent observer visibility. Compare normalized domain outcomes per ADR 0003 — not adapter rendering. **Fake run-output stream tests do not count** toward replaceability; actual supervision/output stays Phase 3. Core must import neither adapter.
 
-4. **Containment preserved** — `scripts/check-import-allowlist.sh` green on `main`; `cmd/harnessing` and CLI helper packages are **not** on the store-import allowlist (only `internal/host` constructs persistence, per Phase 1 item 3). Forbidden fixture fails the check. H101-34: fixture step must require exit code **1**, not any non-zero.
+4. **Containment preserved** — `scripts/check-import-allowlist.sh` green on `main`; store-import allowlist unchanged (only `internal/host` constructs persistence). **Extend** checks so presentation packages cannot import `host`, `core/task`, storage, or outbound ports (ADR 0003 — no storage allowlist exception for UI). Forbidden fixture fails the check. H101-34: fixture step must require exit code **1**, not any non-zero.
 
 5. **Mailbox adapter (H101-22)** — File-protocol mailbox is the sole writer of `RecordMessagePublished` and `RecordMessageProcessed`; publish precedes process; skipping publish or reversing order is rejected with persisted state unchanged. `MessageAcknowledgement` control records and `AcknowledgeMessage` share the same recipient and idempotency rules. Integration test covers at least one full send → publish → process → ack path through the adapter.
 
@@ -92,7 +92,7 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 
 8. **Zero network** — `go list -deps` on `cmd/harnessing` and packages under `internal/adapters/cli/` (or equivalent) shows no `net` / `net/http` imports, in addition to the Phase 1 core check.
 
-9. **Test layering** — Engine and statestore unit tests remain for domain rules. The shared H101-40 contract suite and item 1's subprocess CLI proof are both required; neither substitutes for the other.
+9. **Test layering** — Engine and statestore unit tests remain for domain rules. The ADR 0003 / `adaptercontract` suite (UI-01–08) and item 1's subprocess CLI proof are both required; neither substitutes for the other.
 
 **Explicitly not Phase 2 exit** (owner/product, not quality gates here): which external agent tool is named for the file-protocol trial (`definition.md` §2 UNKNOWN); agent retirement; task reassignment command; full symbol-level `CommitRequest` detection (still not checkable today per Phase 1).
 
@@ -792,3 +792,59 @@ Claudio's declared assumption is **correct**, not a workaround.
 | Blocker path omitted | **No** — not in item 1 list |
 
 No evidence Claudio worked around an unrecognised second gap.
+
+---
+
+## H101-41 acceptance review (2026-09-19)
+
+Reviewed commit `24a2022` (CLI skeleton — read-only `harnessing task`). Re-ran `go test -count=1 ./cmd/harnessing/...` — seven tests pass. Re-verified allowlist (tree 0, fixture 1) and `go list -deps ./cmd/harnessing` (no `net`).
+
+**Verdict: ACCEPTED WITH FOLLOW-UP** — appropriate first slice; does not discharge Phase 2 exit.
+
+### Phase 2 exit item deltas
+
+| # | Status after `24a2022` | Note |
+| --- | --- | --- |
+| 1 | **Unsatisfied** | Read-only `task` query only; no §2 walkthrough, no subprocess cycle test |
+| 2 | **Unsatisfied** | No crash-restart path |
+| 3 | **Unsatisfied** | No `adaptercontract` suite, no second adapter; see enumeration gap below |
+| 4 | **Partially satisfied** | Store-import half **yes**; UI import allowlist half **no** |
+| 5 | **Unsatisfied** | No mailbox adapter |
+| 6 | **Unsatisfied** | No first-run disclosure in CLI |
+| 7 | **Unsatisfied** | Phase 3 ops not exposed or asserted `Unsupported` |
+| 8 | **Satisfied** | See god Q1 below |
+| 9 | **N/A** | Policy; unit tests do not claim to substitute for items 1 or 3 |
+
+### God question 1 — item 8, zero network
+
+**Discharges item 8.** The item means `go list -deps` on the CLI package tree finds no `net` / `net/http` — not a runtime egress harness (that is Phase 4). `cmd/harnessing` is the current equivalent of `internal/adapters/cli/`; no stronger requirement is stated. Optional follow-up: add an explicit CI step so the check cannot regress silently (Phase 1 core used the same manual pattern).
+
+### God question 2 — item 4, containment
+
+**Store-import half: discharged for this slice.** Allowlist unchanged; `cmd/harnessing` imports only `internal/host` and `internal/core/domain`; no `statestore`, no `ports`, no allowlist entry needed. Forbidden fixture still exits **1** (CI asserts exactly 1).
+
+**UI import allowlist half: not discharged.** Item 4 also requires presentation packages not import `host` / `core/task` (ADR 0003 direction). This card correctly imports `host` as an interim thin wrapper — that is the right pattern until `FrontendSession` lands, but the extended gate is still open.
+
+### God question 3 — stable errors and item 1
+
+**Right shape; not yet required to accept this slice.** Item 1 does not name an error format today, but a subprocess walkthrough will need stable machine-readable denial/conflict codes. `describeError` rendering `"<ErrorCode>: <detail>"` with `NotFound` asserted in `TestRun_TaskUnknownIDIsLegibleFailure` is the correct foundation. **Recommend:** when item 1's walkthrough test is written, assert at least one `Denied` and one `Conflict` path render the code prefix — do not add to item 1 wording until then.
+
+### God question 4 — zero divergences
+
+**Not a clean bill; no undeclared divergence found.** Kevin volunteered the real gap: **`Capabilities` has no list/enumeration query** — workspace overview and status views cannot be built from get-by-ID alone. Forwarded to Stanley for H101-40 / ADR 0003; **item 3 risk:** two adapters that only display records whose IDs are already known could pass a thin shared suite while demonstrating little. Contract must require snapshot/list semantics (ADR UI-06) before item 3 can discharge.
+
+**Scope boundaries (not divergences):** no mutation commands, no mailbox, no disclosure — correctly deferred.
+
+### Design calls verified
+
+| Call | Result |
+| --- | --- |
+| Authority from CLI flags only (`-workspace`, `-workspace-id`, `-reviewer`) | **Pass** — `runTask` passes only flag values to `host.Open`; no workspace-content authority |
+| No env-var reviewer default | **Pass** — deliberate; agree with god's rating |
+| `Close` on every exit path | **Pass** — `TestRun_TaskClosesWorkspaceEvenOnQueryFailure` positive control |
+
+### Follow-up (non-blocking for this card)
+
+- Enumeration / snapshot query for item 3 (Stanley H101-40 amendment).
+- UI import allowlist when `FrontendSession` splits presentation from `host`.
+- Item 1 walkthrough subprocess test with stable error assertions on denial paths.
