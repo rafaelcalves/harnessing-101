@@ -555,3 +555,74 @@ All nine tests prove what their names claim. No restart-durability test for regi
 
 - **H101-25 assembly** (existing): agent ingress cannot set `IsHumanReviewer`; include roster hijack scenario (`UpdateAgent` on another agent's ID with forged human flag denied at host).
 - **CreateTask assignee validation** (existing): require `AssigneeID` registered before task create, or document intentional deferral.
+
+---
+
+## H101-19b acceptance review (2026-09-19)
+
+Reviewed commit `a34f51d` (CI import containment — H101-27 obligation 2 weaker rule). Re-ran checker: tree exits 0; `./testdata/forbidden` exits 1 with both violations named.
+
+**Verdict: ACCEPTED WITH FOLLOW-UP**
+
+**Phase 1 exit item 3 (Containment): PARTIALLY SATISFIED** — import gate + forbidden fixture are in place; allowlist hygiene and `CommitRequest` construction inside permitted packages remain open.
+
+### DoD checklist
+
+| # | Result | Note |
+| --- | --- | --- |
+| 3 Honest verification | Pass | CI requires fixture to **fail** (`.github/workflows/ci.yml` lines 27–32); not print-and-pass |
+| 11 Tests | Pass | Forbidden fixture is the demonstrated negative case |
+| 14 Commit identity | Pass | `a34f51d` authored correctly |
+
+### What this card delivers (matches H101-27 weaker rule)
+
+| Requirement | Status |
+| --- | --- |
+| `go list` package import allowlist | **Done** — `scripts/check-import-allowlist.sh` + `docs/architecture/import-allowlist.txt` |
+| Forbidden fixture must fail check | **Done** — `testdata/forbidden/reach_persistence.go` |
+| Documented as import containment, not symbol analysis | **Done** — allowlist header lines 3–6; script lines 4–6 |
+| Wired in CI | **Done** — workflow steps after vet |
+
+Claudio's declared limit (cannot detect `CommitRequest` construction inside an already-permitted package) is **explicit and honest** — not hidden.
+
+### God question 1 — `internal/host` vs `internal/headless`
+
+**Exactly one** production package outside `statestore` itself should construct/inject the store. **Not both.**
+
+| Package | At `a34f51d` | Ruling |
+| --- | --- | --- |
+| `internal/host` | Exists (`doc.go` stub; no store import yet) | **Keep** — matches `boundaries.md` hosting section and existing package name |
+| `internal/headless` | **Does not exist** | **Remove from allowlist** until Kevin lands composition under that name, **or** replace `host` with `headless` if that is the chosen name — never both |
+
+Pre-authorizing two doors where the design intends one boundary is load-bearing drift. Justification must live in `import-allowlist.txt` next to the single entry, e.g. "sole composition root; constructs FileStore privately; does not expose persistence."
+
+If Kevin wires composition in `internal/host`, delete the `headless` lines. If he chooses `internal/headless`, delete `host` when that package lands.
+
+### God question 2 — `CommitRequest` inside permitted packages
+
+**Within the weaker H101-27 rule: acceptable.** Item 3 as written mentions both import containment and `CommitRequest` construction. This script covers **imports only**.
+
+| Layer | Covered by H101-19b? |
+| --- | --- |
+| New package imports `statestore` | **Yes** |
+| Allowed package builds `CommitRequest` with hostile `Mutate` | **No** — documented limit |
+
+That gap is why obligation 3 (assembly authorization negatives) and future AST analysis remain on the Phase 1 exit. **Does not reject H101-19b** — it was never promised to discharge the full item 3 wording alone.
+
+### God question 3 — allowlist entry for non-existent package
+
+**Worth a check.** A phantom entry fails silently — nothing imports, nothing warns, but a second door appears approved in writing.
+
+**Weaker self-correction:** Kevin hits CI failure if he imports store from an unlisted package name. That does **not** catch the opposite failure (allowlist lists a package he never creates, leaving a documented door unused).
+
+**Follow-up:** add to `check-import-allowlist.sh`: every non-comment allowlist path except `statestore` itself must resolve via `go list` (or directory exists under `internal/`). ~10 lines.
+
+### Declared divergence — verified
+
+One divergence, stated upfront: no `CommitRequest` call-site detection inside permitted packages. **Accurate.** Treated as accepted limitation per H101-27, not a hidden zero.
+
+### Follow-up before calling item 3 satisfied
+
+1. Collapse allowlist to **one** store-constructor package with inline justification.
+2. Optional: allowlist paths must exist in tree.
+3. H101-19 obligations 1 and 3 (composition + assembly tests) — still required for item 3 completion.
