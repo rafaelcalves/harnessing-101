@@ -22,6 +22,34 @@ func TestRun_Version(t *testing.T) {
 	}
 }
 
+func TestRun_DisclosureIsUnconditionalAndKeepsStdoutScriptable(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := run([]string{"version"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	if out.String() != "harnessing dev\n" {
+		t.Fatalf("stdout = %q, want stable version output without disclosure", out.String())
+	}
+	if !strings.HasPrefix(errOut.String(), disclosure+"\n") {
+		t.Fatalf("stderr = %q, want disclosure before command output", errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "does not start, observe, or restrict any agent process in this phase") {
+		t.Fatalf("stderr omitted the unconditional process disclosure: %q", errOut.String())
+	}
+}
+
+func TestRun_DisclosurePrecedesFreshWorkspaceCommand(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := run([]string{"task", "-workspace", t.TempDir(), "missing"}, &out, &errOut)
+	if code == 0 {
+		t.Fatal("exit code = 0 for missing task, want non-zero")
+	}
+	if !strings.HasPrefix(errOut.String(), disclosure+"\n") {
+		t.Fatalf("stderr = %q, want disclosure before task handling", errOut.String())
+	}
+}
+
 func TestRun_UnknownCommand(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := run([]string{"bogus"}, &out, &errOut)

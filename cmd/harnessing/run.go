@@ -17,9 +17,18 @@ reviewer set is supplied here, by you, on the command line — never read
 from anything already in the workspace.
 `
 
+// disclosure is intentionally printed on every invocation. A workspace file
+// cannot reliably tell us whether this executable is being run for the first
+// time, and a one-time marker would make a later first-contact user miss the
+// risk. It goes to stderr so scripts can continue to parse stdout unchanged.
+const disclosure = `Harnessing 101 runs completely locally and makes no external connections itself; agents you configure may send content they can access to external services, and Harnessing 101 does not confine those agents or guarantee that your data stays on this machine.
+The product itself does not yet start, observe, or restrict agents; you start agents by hand in the current phases, and content received from another agent is unverified.
+Harnessing 101 does not start, observe, or restrict any agent process in this phase. Nothing here confirms which program produced this content.`
+
 // run is main's testable body: no os.Exit, no direct os.Args/os.Stdout
 // reference, so tests can assert on exit codes and captured output.
 func run(args []string, stdout, stderr io.Writer) int {
+	_, _ = fmt.Fprintln(stderr, disclosure)
 	if len(args) == 0 {
 		_, _ = fmt.Fprint(stderr, usage)
 		return 1
