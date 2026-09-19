@@ -304,6 +304,140 @@ func (e *Engine) GetTask(ctx context.Context, taskID domain.TaskID) (domain.Task
 	return task, nil
 }
 
+// RegisterAgentRequest is version 1's RegisterAgent payload (boundaries.md
+// line 24): agentID and displayName are required, profileID is optional.
+type RegisterAgentRequest struct {
+	RequestID   domain.RequestID
+	AgentID     domain.AgentID
+	DisplayName string
+	ProfileID   string
+}
+
+// UpdateAgentRequest is "an explicit patch of those mutable fields"
+// (boundaries.md line 24): DisplayName/ProfileID are nil-means-unchanged
+// pointers. AgentID identifies which record to patch; there is no field
+// anywhere in this struct that could write a new ID onto an existing
+// Agent — the immutable field is unpatchable by construction, not by
+// convention.
+type UpdateAgentRequest struct {
+	RequestID   domain.RequestID
+	AgentID     domain.AgentID
+	DisplayName *string
+	ProfileID   *string
+}
+
+// canWriteAgentRecord decides RegisterAgent/UpdateAgent authorization the
+// same way for both: self (an agent registering or updating itself) or a
+// host-authorized human reviewer (the operator doing initial roster
+// setup, per definition.md "the user can ... register named agents").
+// Any other caller acting on a different agent's record is Denied — the
+// same class of rule as AcknowledgeMessage's recipient-only check, per
+// Kelly's H101-21 comparison. This reuses the two authorization
+// primitives the engine already has (self-scope, human-reviewer
+// authority) rather than inventing a third.
+func canWriteAgentRecord(caller CallerScope, target domain.AgentID) bool {
+	return caller.IsHumanReviewer || caller.AgentID == target
+}
+
+func (e *Engine) RegisterAgent(ctx context.Context, caller CallerScope, req RegisterAgentRequest) (domain.Receipt, error) {
+	if req.AgentID == "" {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "agentID must not be empty"}
+	}
+	if req.DisplayName == "" {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "displayName must not be empty"}
+	}
+	if !canWriteAgentRecord(caller, req.AgentID) {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrDenied, Detail: "only the agent itself or an authorized human reviewer may register this agentID"}
+	}
+
+	fp := fingerprint("RegisterAgent", req.AgentID, req.DisplayName, req.ProfileID)
+	return e.commit(ctx, caller, req.RequestID, fp, func(snap *domain.Snapshot) ([]domain.Event, error) {
+		if _, _, found := findAgent(snap, req.AgentID); found {
+			// Unconditional, matching CreateTask's precedent for an existing
+			// ID: idempotency is the store's job (same request ID, same
+			// payload replays the receipt); a second independent request
+			// against an ID that already exists is always Conflict, not a
+			// second implicit rule about matching payloads.
+			return nil, &domain.Error{Code: domain.ErrConflict, Detail: "agentID already registered"}
+		}
+
+		now := e.clock.WallNow()
+		snap.Agents = append(snap.Agents, domain.Agent{
+			ID:          req.AgentID,
+			DisplayName: req.DisplayName,
+			ProfileID:   req.ProfileID,
+			Provenance:  e.claimedProvenance(caller, now),
+		})
+
+		ev, err := e.event(ctx, "AgentRegistered", now, string(req.AgentID))
+		if err != nil {
+			return nil, err
+		}
+		return []domain.Event{ev}, nil
+	})
+}
+
+func (e *Engine) UpdateAgent(ctx context.Context, caller CallerScope, req UpdateAgentRequest) (domain.Receipt, error) {
+	if req.AgentID == "" {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "agentID must not be empty"}
+	}
+	if req.DisplayName == nil && req.ProfileID == nil {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "patch must set at least one of displayName or profileID"}
+	}
+	if req.DisplayName != nil && *req.DisplayName == "" {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "displayName, if patched, must not be empty"}
+	}
+	if !canWriteAgentRecord(caller, req.AgentID) {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrDenied, Detail: "only the agent itself or an authorized human reviewer may update this agentID"}
+	}
+
+	fp := fingerprint("UpdateAgent", req.AgentID, req.DisplayName, req.ProfileID)
+	return e.commit(ctx, caller, req.RequestID, fp, func(snap *domain.Snapshot) ([]domain.Event, error) {
+		idx, _, found := findAgent(snap, req.AgentID)
+		if !found {
+			return nil, &domain.Error{Code: domain.ErrNotFound, Detail: "agent not found"}
+		}
+
+		if req.DisplayName != nil {
+			snap.Agents[idx].DisplayName = *req.DisplayName
+		}
+		if req.ProfileID != nil {
+			snap.Agents[idx].ProfileID = *req.ProfileID
+		}
+		now := e.clock.WallNow()
+		provenance := e.claimedProvenance(caller, now)
+		snap.Agents[idx].LastUpdatedProvenance = &provenance
+
+		ev, err := e.event(ctx, "AgentUpdated", now, string(req.AgentID))
+		if err != nil {
+			return nil, err
+		}
+		return []domain.Event{ev}, nil
+	})
+}
+
+// GetAgent is a read, not a command: no receipt, no idempotency ledger.
+func (e *Engine) GetAgent(ctx context.Context, agentID domain.AgentID) (domain.Agent, error) {
+	snap, err := e.store.Load(ctx, e.workspaceID)
+	if err != nil {
+		return domain.Agent{}, err
+	}
+	_, agent, found := findAgent(&snap, agentID)
+	if !found {
+		return domain.Agent{}, &domain.Error{Code: domain.ErrNotFound, Detail: "agent not found"}
+	}
+	return agent, nil
+}
+
+func findAgent(snap *domain.Snapshot, id domain.AgentID) (int, domain.Agent, bool) {
+	for i, a := range snap.Agents {
+		if a.ID == id {
+			return i, a, true
+		}
+	}
+	return 0, domain.Agent{}, false
+}
+
 // SendMessageRequest is the version 1 message command. SenderAgentID is the
 // message's claimed sender; Provenance separately records the host-scoped
 // caller and remains Unverified in this phase.

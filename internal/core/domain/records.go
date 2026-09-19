@@ -41,11 +41,16 @@ const (
 	OperationRecoveryRequired OperationState = "RecoveryRequired"
 )
 
-// Agent is a registered participant in a workspace.
+// Agent is a registered participant in a workspace. Provenance records who
+// registered it; LastUpdatedProvenance is nil until the first UpdateAgent,
+// mirroring TaskResult's Provenance/DecisionProvenance split — creation and
+// the most recent write are both claims, tracked separately.
 type Agent struct {
-	ID          AgentID
-	DisplayName string
-	ProfileID   string
+	ID                    AgentID
+	DisplayName           string
+	ProfileID             string
+	Provenance            Provenance
+	LastUpdatedProvenance *Provenance
 }
 
 // Task is a unit of accountable work. Revision is task-scoped and distinct
