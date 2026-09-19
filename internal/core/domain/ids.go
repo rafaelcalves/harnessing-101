@@ -6,6 +6,7 @@ type (
 	WorkspaceID string
 	AgentID     string
 	TaskID      string
+	ResultID    string
 	MessageID   string
 	RunID       string
 	OperationID string

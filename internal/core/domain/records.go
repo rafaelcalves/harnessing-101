@@ -12,10 +12,11 @@ type (
 )
 
 const (
-	TaskTodo    TaskStatus = "Todo"
-	TaskDoing   TaskStatus = "Doing"
-	TaskBlocked TaskStatus = "Blocked"
-	TaskDone    TaskStatus = "Done"
+	TaskTodo           TaskStatus = "Todo"
+	TaskDoing          TaskStatus = "Doing"
+	TaskBlocked        TaskStatus = "Blocked"
+	TaskAwaitingReview TaskStatus = "AwaitingReview"
+	TaskDone           TaskStatus = "Done"
 )
 
 const (
@@ -47,13 +48,75 @@ type Agent struct {
 	ProfileID   string
 }
 
-// Task is a unit of accountable work.
+// Task is a unit of accountable work. Revision is task-scoped and distinct
+// from the workspace revision (boundaries.md, "completion and acceptance
+// contract"); commands bind to this value to detect a stale caller.
 type Task struct {
-	ID         TaskID
-	Title      string
-	AssigneeID AgentID
-	Status     TaskStatus
+	ID              TaskID
+	Title           string
+	AssigneeID      AgentID
+	Status          TaskStatus
+	Revision        uint64
+	CurrentResultID *ResultID
+	Provenance      Provenance
 }
+
+// IdentityVerification names how much a claimed identity was checked. The
+// only value that exists in this phase is Unverified: even a host-supplied
+// caller scope is application-level authorization, not cryptographic
+// authentication, and a written sender field never authenticates its
+// author (docs/security/threat-model.md §4-5). No stronger value is
+// defined until a verification mechanism actually exists — do not add one
+// speculatively.
+type IdentityVerification string
+
+const IdentityUnverified IdentityVerification = "unverified"
+
+// EntryMechanism records how a record entered the workspace. "command" is
+// the only value this slice produces: every record here comes from a
+// direct, in-process command call, not a file-based mailbox ingress.
+type EntryMechanism string
+
+const EntryMechanismCommand EntryMechanism = "command"
+
+// Provenance is attached to every record whose content or identity claim
+// did not come from a verified source. It exists from Phase 1 per
+// docs/product/definition.md "do not defer provenance past Phase 1":
+// retrofitting it onto a record format already in use is expensive.
+// ClaimedAgentID is named "claimed" deliberately — it is the actor
+// identity as asserted by the caller scope the host supplied, and it is
+// never treated as, or labelled as, checked identity.
+type Provenance struct {
+	ClaimedAgentID       AgentID
+	EntryMechanism       EntryMechanism
+	RecordedAt           time.Time
+	IdentityVerification IdentityVerification
+}
+
+// TaskResult is an immutable report against one task. Once created it is
+// never mutated; rework produces a new ResultID (boundaries.md line 28).
+// Decision fields are set exactly once, by AcceptTaskResult or
+// RejectTaskResult, and never change afterwards.
+type TaskResult struct {
+	ResultID   ResultID
+	TaskID     TaskID
+	Summary    string
+	Artifacts  []string
+	Provenance Provenance
+
+	Decision           TaskResultDecision
+	DecisionReason     string
+	DecisionProvenance Provenance
+}
+
+// TaskResultDecision is empty ("") while a result is awaiting review.
+type TaskResultDecision string
+
+const (
+	TaskResultPending  TaskResultDecision = ""
+	TaskResultAccepted TaskResultDecision = "Accepted"
+	TaskResultRejected TaskResultDecision = "Rejected"
+)
 
 // Envelope is a mailbox message as adapters exchange it. See boundaries.md,
 // "event and mailbox records".
@@ -95,6 +158,7 @@ type Snapshot struct {
 	Cursor      string
 	Agents      []Agent
 	Tasks       []Task
+	TaskResults []TaskResult
 }
 
 // ExecutionSpec describes a local process an adapter may start. Resolving
