@@ -1,0 +1,14 @@
+# Build artifacts
+/bin/
+/dist/
+*.exe
+*.test
+
+# Go build/test caches, if ever created inside the repo
+/.cache/
+
+# Editor and OS noise
+.DS_Store
+*.swp
+.idea/
+.vscode/

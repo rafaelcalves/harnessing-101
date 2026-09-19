@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Commit-identity guard. See docs/DEVELOPMENT.md for the one-line install
+# step — git hooks are not cloned, so this file being in the repo does
+# nothing until a contributor points core.hooksPath at this directory.
+set -euo pipefail
+
+required_email="rafael.ca.dev@gmail.com"
+
+# `git var GIT_AUTHOR_IDENT` reports the identity git would actually use for
+# this commit (env vars override config), so this catches the global work
+# identity leaking in as well as a bad local override.
+author_ident="$(git var GIT_AUTHOR_IDENT)"
+author_email="$(printf '%s' "$author_ident" | sed -n 's/.*<\(.*\)>.*/\1/p')"
+
+if [ "$author_email" != "$required_email" ]; then
+	echo "commit rejected: author email is '$author_email', required '$required_email'" >&2
+	echo "fix: git config user.email $required_email" >&2
+	exit 1
+fi
