@@ -67,7 +67,7 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 | # | Criterion | Checkable today? |
 | --- | --- | --- |
 | 1 | CLI product cycle (§2 walkthrough) | **No** — needs `cmd/harnessing` and a CI subprocess test |
-| 2 | Restart after crash | **No** — needs H101-20 recovery (or documented manual procedure exercised in test) plus CLI reopen |
+| 2 | Restart after crash | **Partially** — H101-20 flock recovery on unix (`d2f4266`); harnessing crash test after item 1 still needed; Windows `Unsupported` |
 | 3 | Swappability (ADR 0003 UI-01–08) | **No** — needs `internal/adaptercontract` suite, FrontendSession, throwaway adapter |
 | 4 | Containment preserved | **Partially** — store half satisfied (`24a2022`); UI import allowlist (no host from presentation) not yet enforced |
 | 5 | Mailbox adapter (H101-22) | **No** — needs file mailbox wired to delivery-fact recorders |
@@ -78,7 +78,7 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 
 1. **CLI product cycle (§2 walkthrough)** — A CI-runnable script or `go test` drives the **minimum useful product** in [`docs/product/definition.md`](../product/definition.md) §2 exclusively through the shipped `harnessing` command (subprocess, not in-process `host` import from the test package): create/open workspace; register ≥2 named agents; create a task with one accountable owner; task-linked handoff with explicit acknowledgement; report a blocker and resolve it; report a result; human reject then accept a replacement result; status queries show assigned / in-progress / blocked / awaiting-review with reporter identity; close the CLI; reopen; assert durable records without resending work. **This item is what “usable for real work” means** — not a subjective judgment.
 
-2. **Restart after crash** — After the cycle in item 1, simulate an unclean host exit (`kill -9` or equivalent) without `Close`; a subsequent `harnessing` invocation must reopen the same workspace and recover the persisted cycle state. **Blocked until H101-20** delivers stale-lock recovery **or** a documented, tested manual `.lock` removal procedure is exercised in CI. Graceful reopen alone does **not** discharge this item (ADR 0003 UI-07). Inherited from Phase 1 limits; not deferrable to Phase 3.
+2. **Restart after crash** — After the cycle in item 1, simulate an unclean host exit (`kill -9` or equivalent) without `Close`; a subsequent `harnessing` invocation must reopen the same workspace and recover the persisted cycle state. **H101-20** (flock on unix; manual fallback documented in `h101-20-lock-recovery.md`) satisfies the lock-recovery prerequisite on **linux and darwin** — platforms CI and local dev exercise. **Windows** remains `Unsupported` until lock support is implemented and crash-release verified; item 2 does not discharge on Windows while ADR 0001's platform matrix is unsettled. Graceful reopen alone does **not** discharge this item (ADR 0003 UI-07). Inherited from Phase 1 limits; not deferrable to Phase 3.
 
 3. **Swappability (shared adapter contract)** — [ADR 0003](../adr/0003-ui-adapter-contract.md) (H101-40) defines behavioral scenarios **UI-01 through UI-08**; this item requires both adapters to pass them in CI, not reproduce the architecture here. The shared black-box suite lives in `internal/adaptercontract/contract_test.go`; each adapter enters through its **real** input driver (CLI argv/stdin/structured output; throwaway independent handler — no CLI imports, no shared dispatch). Observations come through the caller-bound **FrontendSession** surface (not raw `Capabilities` injection). Suite includes per-adapter isolated workspaces, cross-adapter continuation (A writes, B reads/acks/reviews), and concurrent observer visibility. Compare normalized domain outcomes per ADR 0003 — not adapter rendering. **Fake run-output stream tests do not count** toward replaceability; actual supervision/output stays Phase 3. Core must import neither adapter.
 
@@ -890,3 +890,53 @@ Reviewed commit `1eda92b` (unconditional CLI disclosure). Re-ran `go test -count
 ### Design call verified
 
 Every invocation + stderr-first: **correct** for public clone-and-run and scriptable stdout. No persisted marker.
+
+---
+
+## H101-47 / H101-20 acceptance review (2026-09-19)
+
+Reviewed commit `d2f4266` (flock lock recovery). Re-ran `go test -count=1 ./internal/adapters/statestore/ -run 'Recover|SecondOpen'` — pass. Read `docs/architecture/h101-20-lock-recovery.md`.
+
+**Verdict: ACCEPTED WITH FOLLOW-UP**
+
+**Phase 2 exit item 2: PARTIALLY SATISFIED**
+
+### What item 2 has two parts
+
+| Part | Status after `d2f4266` |
+| --- | --- |
+| Lock recovery prerequisite (H101-20) | **Satisfied on linux/darwin** — flock, subprocess SIGKILL test, `SecondOpenIsBusy` still passes |
+| Full item 2 proof (item 1 cycle → kill CLI → `harnessing` reopen) | **Unsatisfied** — no harnessing subprocess crash test yet |
+
+H101-20 was the **blocker** named in item 2; it is now cleared on exercised platforms. Item 2 itself is not fully discharged until item 1's walkthrough exists and a crash-reopen test runs through `harnessing`.
+
+### God question — Windows `Unsupported` vs item 2
+
+**Item 2 discharges on platforms we actually exercise, not on an undefined "all supported platforms" set.**
+
+- **linux** (CI) and **darwin** (local dev): lock recovery is implemented and crash-tested → H101-20 part of item 2 **yes**.
+- **Windows**: honest `Unsupported` → item 2 **no** on Windows until lock support lands with verified crash-release, or Windows is explicitly excluded from Phase 2 scope in writing.
+
+ADR 0001's platform matrix is still **UNKNOWN**; this card does not settle it. Phase 2 exit should not be blocked on Windows while the matrix is unsettled, but item 2 must record Windows as not yet satisfied. **Owner decision** if Phase 2 claims cross-platform CLI before Phase 3.
+
+### God question 1 — is the crash test honest?
+
+**Yes.** The poll waits for kernel process teardown after `SIGKILL`, not a lock timeout — there is none. The test also asserts `Busy` while the helper is alive (lines 73–79), which is the negative control. Five-second deadline with 20 ms sleep is proportionate; failure message would catch a real regression.
+
+### God question 2 — NFS / network filesystem
+
+**"We do not claim to support it" is enough for item 2.** `boundaries.md` and `threat-model.md` already say unverified network filesystems are unsupported. `flock` over NFS is unreliable without correct lock-daemon configuration; this card correctly adds no silent detection. **Follow-up (non-blocking):** if clone-and-run users on NFS hit opaque `Busy`, that is an operational hazard outside claimed scope — not an item 2 miss today.
+
+### God question 3 — one declared divergence (no PID fallback)
+
+**Accepted.** PID/start-time check would reintroduce PID-reuse hazard flock avoids. No undeclared divergence found.
+
+### Mechanism vs boundaries.md
+
+**Satisfies** the ban on stealing locks by elapsed time — recovery is kernel descriptor lifetime, not wall-clock theft. Documented manual `.lock` removal remains as fallback in `h101-20-lock-recovery.md`.
+
+### Follow-up
+
+- Harnessing subprocess crash test once item 1 lands.
+- Windows lock implementation + crash verification, or explicit Phase 2 platform exclusion.
+- Optional: CI runs `lock_recovery_test.go` on linux only (`//go:build !windows` already excludes Windows test file).
