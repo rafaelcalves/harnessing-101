@@ -31,6 +31,18 @@ const (
 // caller-supplied path component in this slice (StateStore's filenames
 // are fixed constants), but the guard exists so a later port (Mailbox)
 // cannot introduce an escape by accident.
+//
+// The workspace lock (H101-20) is an OS advisory file lock (flock(2)),
+// not a lock *file's existence*. That distinction is the whole point:
+// the kernel releases an flock automatically when the holding process
+// exits for any reason — normal Close, crash, or SIGKILL — with no PID
+// bookkeeping and no risk of a reused PID being mistaken for a live
+// owner. boundaries.md forbids stealing a lock on elapsed wall time;
+// this needs no such timeout, because "is the owner still alive" is a
+// question the kernel already answers correctly. See lock_unix.go for
+// the mechanism and its platform scope, and
+// docs/architecture/h101-20-lock-recovery.md for the fuller reasoning
+// and the manual-removal fallback for a platform where it is unavailable.
 type FileStore struct {
 	mu       sync.Mutex
 	root     string
@@ -39,9 +51,10 @@ type FileStore struct {
 }
 
 // Open resolves root, creates it if missing, and takes the workspace
-// lock. A second Open against the same root fails Busy — boundaries.md
-// "one host holds an exclusive operating-system-backed workspace lock; a
-// second writer fails Busy." The lock is released by Close.
+// lock via acquireLock (platform-specific; see lock_unix.go). A second
+// Open against the same root — from this process or a live other one —
+// fails Busy; a second Open after the previous owner died without
+// calling Close succeeds, because the OS already released the lock.
 func Open(root string) (*FileStore, error) {
 	resolved, err := resolveRoot(root)
 	if err != nil {
@@ -61,27 +74,45 @@ func Open(root string) (*FileStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	// Not O_EXCL: existence of this file means nothing by itself — a
+	// crashed owner's lock file is expected to still be sitting here.
+	// Ownership is decided by acquireLock, not by whether this call
+	// creates or reopens the file.
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
-		if os.IsExist(err) {
-			return nil, &domain.Error{Code: domain.ErrBusy, Detail: "workspace root is already locked by another store"}
-		}
-		return nil, fmt.Errorf("acquire workspace lock: %w", err)
+		return nil, fmt.Errorf("open workspace lock file: %w", err)
 	}
+	if err := acquireLock(lockFile); err != nil {
+		_ = lockFile.Close()
+		return nil, err
+	}
+	// Best-effort diagnostic content for a human inspecting the file
+	// while debugging — never read back by this adapter for any
+	// correctness decision. A failure here does not fail Open: holding
+	// the lock is what matters.
+	_ = lockFile.Truncate(0)
+	_, _ = lockFile.WriteAt([]byte(fmt.Sprintf("pid=%d\n", os.Getpid())), 0)
 
 	return &FileStore{root: resolved, lockPath: lockPath, lockFile: lockFile}, nil
 }
 
-// Close releases the workspace lock. It does not delete persisted state.
+// Close releases the workspace lock and removes the lock file. It does
+// not delete persisted state. If the process dies before Close runs,
+// the OS releases the flock anyway (that is the mechanism's entire
+// point) and the leftover file is harmless clutter the next Open reuses.
 func (s *FileStore) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.lockFile == nil {
 		return nil
 	}
+	unlockErr := releaseLock(s.lockFile)
 	closeErr := s.lockFile.Close()
 	removeErr := os.Remove(s.lockPath)
 	s.lockFile = nil
+	if unlockErr != nil {
+		return unlockErr
+	}
 	if closeErr != nil {
 		return closeErr
 	}
