@@ -1,0 +1,23 @@
+# H101-19 Phase 1 import containment
+#
+# This is the deliberately weaker, checkable rule from H101-27: CI checks
+# resolved package imports with `go list`. It does not prove that a package
+# avoids method values, wrappers, or CommitRequest construction; the future
+# standard-library AST checker must provide that stronger guarantee.
+#
+# Production packages allowed to import the concrete state store:
+github.com/rafaelcalves/harnessing-101/internal/adapters/statestore
+github.com/rafaelcalves/harnessing-101/internal/host
+github.com/rafaelcalves/harnessing-101/internal/headless
+
+# Production packages allowed to import the ports package, which contains the
+# outbound persistence contract:
+github.com/rafaelcalves/harnessing-101/internal/adapters/statestore
+github.com/rafaelcalves/harnessing-101/internal/core/task
+github.com/rafaelcalves/harnessing-101/internal/host
+github.com/rafaelcalves/harnessing-101/internal/headless
+
+# Test-only exception: statestore and its own *_test.go files may exercise
+# arbitrary StateStore mutations for adapter contract tests. `go list`'s
+# Imports field excludes test imports, so those files do not enter the
+# production import check.
