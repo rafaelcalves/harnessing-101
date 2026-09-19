@@ -80,7 +80,7 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 
 2. **Restart after crash** — After the cycle in item 1, simulate an unclean host exit (`kill -9` or equivalent) without `Close`; a subsequent `harnessing` invocation must reopen the same workspace and recover the persisted cycle state. **H101-20** (flock on unix; manual fallback documented in `h101-20-lock-recovery.md`) satisfies the lock-recovery prerequisite on **linux and darwin** — platforms CI and local dev exercise. **Windows** remains `Unsupported` until lock support is implemented and crash-release verified; item 2 does not discharge on Windows while ADR 0001's platform matrix is unsettled. Graceful reopen alone does **not** discharge this item (ADR 0003 UI-07). Inherited from Phase 1 limits; not deferrable to Phase 3.
 
-3. **Swappability (shared adapter contract)** — [ADR 0003](../adr/0003-ui-adapter-contract.md) (H101-40) defines behavioral scenarios **UI-01 through UI-08**; this item requires both adapters to pass them in CI, not reproduce the architecture here. The shared black-box suite lives in `internal/adaptercontract/contract_test.go`; each adapter enters through its **real** input driver (CLI argv/stdin/structured output; throwaway independent handler — no CLI imports, no shared dispatch). Observations come through the caller-bound **FrontendSession** surface (not raw `Capabilities` injection). Suite includes per-adapter isolated workspaces, cross-adapter continuation (A writes, B reads/acks/reviews), and concurrent observer visibility. Compare normalized domain outcomes per ADR 0003 — not adapter rendering. **Fake run-output stream tests do not count** toward replaceability; actual supervision/output stays Phase 3. Core must import neither adapter.
+3. **Swappability (shared adapter contract)** — [ADR 0003](../adr/0003-ui-adapter-contract.md) (H101-40) defines behavioral scenarios **UI-01 through UI-08**; this item requires both adapters to pass them in CI per the **H101-53 assertion table** below, not reproduce the architecture here. The shared black-box suite lives in `internal/adaptercontract/contract_test.go`; each adapter enters through its **real** input driver (CLI argv/stdin/structured output; throwaway independent handler — no CLI imports, no shared dispatch). Observations come through the caller-bound **FrontendSession** surface (not raw `Capabilities` injection). Suite includes per-adapter isolated workspaces, cross-adapter continuation (A writes, B reads/acks/reviews), and concurrent observer visibility. Compare each adapter against **independently specified expected states**, not adapter-to-adapter equality alone (ADR 0003). **Item 3 does not discharge item 2** — UI-07 covers graceful reopen only; crash restart stays item 2. **Fake run-output stream tests do not count** toward replaceability; actual supervision/output stays Phase 3. Core must import neither adapter.
 
 4. **Containment preserved** — `scripts/check-import-allowlist.sh` green on `main`; store-import allowlist unchanged (only `internal/host` constructs persistence). **Extend** checks so presentation packages cannot import `host`, `core/task`, storage, or outbound ports (ADR 0003 — no storage allowlist exception for UI). Forbidden fixture fails the check. H101-34: fixture step must require exit code **1**, not any non-zero.
 
@@ -940,3 +940,60 @@ ADR 0001's platform matrix is still **UNKNOWN**; this card does not settle it. P
 - Harnessing subprocess crash test once item 1 lands.
 - Windows lock implementation + crash verification, or explicit Phase 2 platform exclusion.
 - Optional: CI runs `lock_recovery_test.go` on linux only (`//go:build !windows` already excludes Windows test file).
+
+---
+
+## H101-53 — ADR 0003 CI assertions for item 3 (2026-09-19)
+
+Reviewed committed ADR 0003 (`9055124`). Stanley owns contract shape; **Kelly owns executable CI assertions** mapped here. Do not implement the suite in this card.
+
+### (a) Item 4 split vs committed ADR — still holds
+
+Re-checked against `9055124`, not the earlier draft from memory. **The split survives unchanged:**
+
+| Half | Committed ADR says | Status |
+| --- | --- | --- |
+| **Store-import** | Only reviewed assembly (`host`) constructs persistence; no storage allowlist exception for UI (ADR §Prohibitions) | **Satisfied** on current tree (`24a2022` — `cmd/harnessing` imports `host` only, not `statestore`/`ports`) |
+| **UI import allowlist** | Presentation packages must not import `host`, `core/task`, storage, or outbound ports; only assembly imports `host` (ADR §Prohibitions) | **Not satisfied** — gate not built; `cmd/harnessing` still imports `host` directly until `FrontendSession` / `internal/api` lands (H101-52) |
+
+`FrontendSession`, `GetSnapshot` enumeration (UI-06), and the adaptercontract suite location are all **present in the committed ADR** — Stanley did not drop the design H101-42 referenced. (ADR header still says "Proposed for review"; technical content is what item 3/4 reference.)
+
+### (b) What CI must assert for item 3 to discharge
+
+Both adapters run the **same** `internal/adaptercontract` scenarios through **real** drivers. Each scenario asserts against **fixture-embedded expected domain state** compiled before either adapter runs, **and** cross-adapter equality on normalized observations (ADR §canonical observations). Suite dependency set must be checked (no `statestore`/`ports` imports in contract tests).
+
+| ID | CI must assert (both adapters) | Checkable today? |
+| --- | --- | --- |
+| **UI-01** | Malformed input → non-zero exit, stable error code, **no** workspace mutation (reopen or snapshot unchanged). Valid command → exact IDs/revisions/body preserved vs fixture. Display activity alone never implies ack/accept/authority. | **No** — needs write commands + FrontendSession + suite |
+| **UI-02** | Success paths render receipt distinct from completed work (revision/result state). Errors use stable `domain.ErrorCode` prefix; never map Denied/Conflict/IOFailure to success. **IOFailure uncertainty:** see gap below. | **Partially** — read-path `NotFound` shape proven (`24a2022`); write + IOFailure paths need surface |
+| **UI-03** | Same `request-id` retry → identical receipt; changed payload → Conflict. No silent new-ID retry after uncertain mutation. **Generated entity IDs** surfaced on create so interrupted caller can recover (stdout or documented field). | **No** — write commands (H101-51); caller `-request-id` design exists uncommitted |
+| **UI-04** | Full cycle: register ≥2 agents, task, blocker, linked message + ack, report, reject, accept — identical domain outcomes. `AwaitingReview` ≠ `Done`. Wrong principal → Denied, state unchanged. | **No** — needs session surface + mutations via CLI/throwaway |
+| **UI-05** | Provenance fields visible; four message delivery facts including **absent** facts; ADR 0002 disclosure present; no validation badges on manual content. | **Partially** — disclosure on every run (`1eda92b`); delivery facts + provenance rendering need mailbox + write path |
+| **UI-06** | **No injected entity IDs** for first overview: discover fixture via `GetSnapshot`, then observe from returned cursor through concurrent change (other adapter or helper). `CursorExpired` → reload. Snapshot refresh not presented as full event history. Detachment/mutation probe per ADR §detachment proof. | **No** — `GetSnapshot` not implemented (H101-52) |
+| **UI-07** | Detach/replace UI does not close other session or cancel work. **Graceful** reopen retains records + request-id replay. | **No** — needs session detach + multi-session test |
+| **UI-08** | Returned view values detached (mutation probe on nested data does not persist). Unsupported ops → consistent `Unsupported`. Run output stream separate from domain events (fake stream tests excluded from item 3 verdict). | **No** — needs snapshot detachment tests + Phase 3 `Unsupported` surface |
+
+**Cross-cutting (all scenarios):** throwaway adapter does not import CLI or share dispatch; crossover scenario (A writes, B continues) on **shared** workspace; concurrent observer sees external commits; `adaptercontract` imports only allowed packages.
+
+### (c) God question 1 — UI-02 and `IOFailure` "applied but uncertain"
+
+**`boundaries.md` cannot express this as a separate stable code today.** Listed codes are `IOFailure` and `RecoveryRequired` only (`boundaries.md` line 13; `domain/errors.go`). The store **does** return `IOFailure` with detail `"commit applied but durability unconfirmed: …"` (`file.go` line 270) — meaning lives in **Detail**, not `ErrorCode`.
+
+**Gap:** UI-02 contractually requires adapters to show uncertainty, not "nothing happened." Adapters **can** satisfy this by rendering `IOFailure` plus detail substring and retaining the caller's request ID — but that is **fragile** (detail is supplementary per boundaries). **Recommendation for implementation card:** either (1) contract test asserts stderr/stdout contains `IOFailure` and `durability unconfirmed` on injected fsync fault, **or** (2) add a dedicated stable code (e.g. extend with `DurabilityUncertain` or map to `RecoveryRequired`) in a scoped domain change. **Item 3 can discharge with (1); (2) is cleaner long-term.**
+
+### (c) God question 2 — UI-03 generated IDs on CLI as shipped
+
+**Not applicable on committed `9055124`** — only read-only `task` exists. **Requirement for H101-51:** write commands must require caller `-request-id` (already designed uncommitted) and **print created entity IDs** (task ID, message ID, etc.) on success, not only receipt request ID. `printReceipt` showing request ID is necessary but not sufficient for "generated IDs surfaced."
+
+### (c) God question 3 — how CI catches "independently expected outcomes"
+
+**Load-bearing rule:** expected state is a **fixture struct literal** (or checked-in golden domain object) built from the scenario definition **before** either adapter runs. Per adapter: `assertNormalizedEqual(observed, expectedFixture)`. **Secondary:** `assertNormalizedEqual(cliObserved, throwawayObserved)` — never the only check.
+
+**CI catches cheating if:**
+1. Each scenario file imports `expected` from a `testdata/adaptercontract/<scenario>/want.go` (or inline literal) with no reference to adapter output.
+2. Code review / optional lint: forbid assigning `expected = cliResult` in contract tests.
+3. Negative regression test: a deliberately broken "echo adapter B copies A's parsed output" must fail the fixture assertion even if A==B.
+
+### (c) God question 4 — UI-07 vs item 2
+
+**Confirmed: item 3 does not discharge item 2.** ADR UI-07 line 47 explicitly separates crash restart ("separate inherited recovery obligation") from graceful reopen. The adaptercontract suite may prove UI-07 graceful paths only. **Item 2** remains the dedicated `harnessing` subprocess `SIGKILL` test after item 1's full cycle (partially satisfied via H101-20 lock mechanism only).
