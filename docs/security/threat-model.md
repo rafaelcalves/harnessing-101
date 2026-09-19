@@ -184,3 +184,55 @@ never claim what was controlled. Concretely and cheaply, before Phase 3 exists:
   provider-approved ones.
 - This is disclosure, not defense. It costs a docs line and a UI restraint, not an
   engineering project, and it is the ceiling of what Phases 1-2 can honestly claim.
+
+## 6. Public-repository exposure review (H101-15)
+
+**Context.** `rafaelcalves/harnessing-101` went public before Phase 0 planned it to. I
+independently re-checked the claims handed to me rather than trusting them on relay:
+`git log --format='%ae' | sort -u` returns exactly one address,
+`rafael.ca.dev@gmail.com`; `git grep` across the current tree for `wolt.com` or the
+owner's work address returns nothing; `git log --all -p` searched for the same terms plus
+secret-shaped words (`secret`, `token`, `password`, key-header strings) across full
+history, not just the current tree, and every hit is prose in the threat model,
+SECURITY.md, ADR 0002, issue/PR templates, or the commit-identity guard describing how to
+handle secrets — never a value. I also read the CI workflow, pre-commit hook, and
+`.gitignore`: pinned actions by hash, no embedded token, no path or credential specific to
+this machine.
+
+**Verdict: confirmed, nothing found here.** No file or history entry should be removed on
+confidentiality grounds. This is an OBSERVED STATE for this repository at this commit
+(630c917), not a standing guarantee — re-run the same check before any future push if the
+history changes.
+
+**2. Disclosure risk of publishing the threat model and ADR 0002 at this detail.**
+**INFERENCE — verdict: publish as-is, do not soften.** The exfiltration path described
+(an agent using its own already-approved connection, triggered by adversarial workspace
+content) is a structural property of "an LLM agent with tool access reads shared files,"
+not a secret about this codebase's implementation. It is close to the general prompt-injection
+risk already public in the wider industry's LLM-agent security discussion; naming it
+precisely here gives a reader no attack they could not already reason out from the product
+description alone, and there is no working exploit, no credential, and no code in either
+document. What would be a mistake is the opposite move: softening or removing the
+detail would look like the team noticed the exposure only after going public and reacted
+by hiding it — worse for trust than the honest version, and it would not reduce the actual
+risk, which lives in the architecture, not in these two documents. I would change one
+thing, not for confidentiality but for correctness: ADR 0002 and threat model §5 currently
+reason about "the bounded trial" and "users" in a way that assumed a small, likely
+private-in-practice audience; that assumption is now false and needs correcting, which is
+finding 3 below.
+
+**3. Does going public earlier than planned change Phase 1-2 advice.** **Yes, one change,
+INFERENCE.** The disclosure mitigation in section 5 (unconditional in-product line, origin
+metadata, no validation-looking UI) was written assuming a reader who had likely seen the
+surrounding docs — an owner-run trial. A public repository means the actual first contact
+for many readers is a random clone-and-run, with no guarantee they read PROJECT-PLAN.md,
+ADR 0002, or this file first. The in-product disclosure line therefore carries more weight
+than it did when this section was written, not less: it is now plausibly the *only*
+disclosure some users see. Recommendation, still cheap: keep it in-product exactly as
+specified, and additionally surface it in the top-level README / first-run output, not
+only inside the coordination views a user might not open before running two agents. I do
+not see a reason to change the phase order or the ADR 0002 acceptance itself on account of
+going public early — the underlying exfiltration risk and its scope are unchanged by who
+can read about it; only how many people the in-product disclosure now needs to reach has
+changed. I deliberately left the phase-order question, ADR 0002's acceptance, and the rest
+of section 5 untouched — going public does not reopen either.
