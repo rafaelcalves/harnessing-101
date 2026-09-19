@@ -174,3 +174,135 @@ Not judged on this card (per dispatch):
 - Threat-model baseline
 - `PROJECT-PLAN.md` still recommends TypeScript while ADR 0001 accepts Go (audit finding 1)
 - Agent file-protocol walkthrough remains **UNKNOWN** (`definition.md` line 27)
+
+---
+
+## H101-12 and H101-14 acceptance review (2026-09-19)
+
+Reviewed commits `681d663` (Phase 1 core slice), `c44d5d9` (directory fsync amendment), `7cdfbd5` and `5601803` (OSS landing + README). Re-ran `go test -count=1 ./...` locally — all pass.
+
+### H101-12 — Phase 1 task lifecycle slice
+
+**Verdict: ACCEPT**
+
+#### DoD checklist (code)
+
+| # | Result | Note |
+| --- | --- | --- |
+| 1 Traceability | Pass | Implements `boundaries.md` completion/acceptance contract; card-declared divergences documented in `ports/outbound.go` lines 27–35 |
+| 2 Evidence labels | N/A | Code card |
+| 3 Honest verification | Pass | Tests assert failure codes and unchanged state on denied transitions; restart test reads back from disk |
+| 4 Scope discipline | Pass | Task engine + FileStore only; messages/mailbox/process not claimed |
+| 5 Status accuracy | Pass | No false "implemented" claims in code |
+| 6 Cross-artefact consistency | Pass | Matches accepted `boundaries.md` semantics for report/accept/reject |
+| 7 QA sign-off | Pass | This section |
+| 11 Tests | Pass | Six engine tests + four statestore tests; names match behaviours exercised |
+| 12 Hexagonal boundaries | Pass | `internal/core/task` imports only `domain` and `ports`; no `net`, filesystem, or CLI |
+| 13 Local-only | Pass | No network imports in core (`grep` clean) |
+| 14 Commit identity | Pass | Commits authored `rafael.ca.dev@gmail.com`; `githooks/pre-commit` enforces |
+
+#### 1. Is acceptance unbypassable?
+
+**No unbypassed code path from Doing to Done found.**
+
+`TaskDone` is assigned in exactly one place: `AcceptTaskResult` (`engine.go` line 251), which requires `caller.IsHumanReviewer` (line 236) and `loadPendingDecision` enforcing `AwaitingReview` (lines 322–323). `TransitionTask` cannot reach Done from Doing: `genericTransitions` (`engine.go` lines 101–106) permits only Todo→Doing, Doing→Blocked, Blocked→Doing, and Done→Todo reopen; `AwaitingReview` and `Done` as targets fail `InvalidArgument` (lines 109–114). `TestDirectDoingToDoneRejected` covers the named concern; structurally, no other `TransitionTask` path sets `TaskDone`.
+
+**Untested but structurally blocked:** `AwaitingReview→Done` via `TransitionTask` (no test by name; would fail for same map reason). **Not a bypass.**
+
+**Out of slice scope:** a caller could invoke `StateStore.Commit` with a custom `Mutate` that sets `Done` directly (`ports/outbound.go` line 54). That bypasses the engine, not the state machine. Phase 2 host wiring must route commands through `Engine`, not raw `Mutate`.
+
+#### 2. Provenance
+
+Checked against `definition.md` lines 66, 82 and `threat-model.md` lines 138–141.
+
+| Field | Assessment |
+| --- | --- |
+| `ClaimedAgentID` | Correct — "claimed" in name and doc (`records.go` lines 86–88) |
+| `IdentityVerification` = `unverified` only | Correct — doc states no stronger value until a mechanism exists (`records.go` lines 64–70) |
+| `EntryMechanism` = `command` | Honest for this slice; file ingress not built yet |
+
+**Minor naming note (not a reject):** `IdentityVerification` as a field name could read like a completed check; the value `unverified` and doc comment mitigate this. UI copy should follow Angela's example ("identity unverified"), not the field name.
+
+No type or field implies authentication occurred.
+
+#### 3. Five declared divergences
+
+| Divergence | Ruling |
+| --- | --- |
+| (a) `Mutate` closure vs literal `Commit` signature | **Accept** — documented in `outbound.go` lines 27–31; enables atomic task+result updates |
+| (b) `Replay` dropped | **Accept** — no subscriber yet; comment commits to revisit |
+| (c) `RegisterAgent` not implemented; unregistered `AssigneeID` | **Accept for this slice** — openly declared; full product cycle needs registration in a follow-on card |
+| (d) Path-escape guard, no caller-supplied paths yet | **Accept** — `safeJoin` tested (`file_test.go` lines 17–37); constants only in this slice |
+| (e) No stale-lock recovery | **Correctly deferred** — does not block H101-12. `boundaries.md` forbids lock stealing on elapsed time; recovery is unbuilt. **Operational impact:** kill -9 without `Close` leaves workspace unusable until manual `.lock` removal. Phase 2 milestone claiming "restart the interface" after crash must not pass until lock recovery exists or manual recovery is documented |
+
+#### 4. Quiet reinterpretation of accepted semantics?
+
+No material reinterpretation found. Dedicated events (`TaskResultReported`/`Accepted`/`Rejected`) used instead of generic `TaskTransitioned` for report/decision (`engine.go` lines 208, 254, 285) — matches `boundaries.md` line 34. Validation failures commit nothing (`file.go` lines 148–152).
+
+#### Amendment — `c44d5d9` directory fsync after rename
+
+**Verdict: ACCEPT** (H101-12 verdict unchanged).
+
+`writeLocked` now calls `fsyncDir` on the workspace root after `os.Rename` (`file.go` lines 226–240). Reasoning is sound: rename atomicity ≠ directory-entry durability; without directory fsync, `TestAwaitingReviewSurvivesRestart` can pass while power-loss would silently lose the commit.
+
+**1. Test worth having?** **No — not economically testable in CI.** Proving this branch needs a crash simulation or a filesystem that refuses `fsync` on a directory. A unit test that only mocks `fsyncDir` to return an error would document the branch but not prove real durability. **Accept as reviewed code**; revisit if a fault-injection hook is added later.
+
+**2. IOFailure after rename — caller problem?** **Manageable; one gap in error taxonomy.**
+
+Checked `Commit` (`file.go` lines 160–166) and `Engine.commit` (`engine.go` lines 382–389):
+
+| Scenario | On-disk state | API return | Safe retry? |
+| --- | --- | --- | --- |
+| `writeLocked` fails before rename | Unchanged | `IOFailure`, empty receipt | Yes — same request ID re-executes mutate |
+| `fsyncDir` fails after rename | **New state persisted** (including receipt in `state.json`) | `IOFailure` with detail "commit applied but durability unconfirmed" (`file.go` line 239), **empty receipt** | **Yes** — retry with **same** request ID hits receipt replay (`file.go` lines 136–138) and returns the recorded receipt |
+
+The engine does not retry and does not treat `IOFailure` as rollback (`engine.go` line 389 passes error through). A caller that retries with a **new** request ID after `fsyncDir` failure may hit `Conflict`/`InvalidArgument` (state already advanced) — confusing but not a silent double-accept.
+
+**Error taxonomy gap:** `boundaries.md` line 13 lists `IOFailure` and `RecoveryRequired` but not "applied but durability unconfirmed." The detail string carries the meaning; no dedicated code exists. **Finding, not a reject** — consider `RecoveryRequired` or a new stable code in a follow-on card. Misleading if a Phase 2 CLI maps all `IOFailure` to "nothing happened."
+
+**H101-12 verdict stands: ACCEPT.**
+
+---
+
+### H101-14 — open-source landing and README
+
+**Verdict: ACCEPT**
+
+#### DoD checklist (documentation)
+
+| # | Result | Note |
+| --- | --- | --- |
+| 1–7 | Pass | OSS set matches Phase 0 exit requirements for contributor readiness |
+| 8 Resolvable references | Pass | All `README.md` links resolve (lines 23–35) |
+| 9 Checkable exits | Pass | CONTRIBUTING commands match CI (`.github/workflows/ci.yml` lines 19–28) |
+| 10 Terminology | Pass | Consistent with project vocabulary |
+
+#### CONTRIBUTING accuracy
+
+Verified against repository as committed:
+
+- Go 1.27.1 in `go.mod` — matches CONTRIBUTING line 9
+- Zero external module dependencies — matches
+- `LICENSE` (Apache-2.0), `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue/PR templates — present
+- CI runs build, test, vet, golangci-lint — matches CONTRIBUTING line 41
+- Commit-identity hook in `githooks/pre-commit` — matches CONTRIBUTING lines 27–28
+
+CONTRIBUTING is true of the repository as it stands.
+
+#### README disclosure (Creed's requirements)
+
+`README.md` lines 7–9 state: (1) product runs locally with no external connections itself; user-configured agents may egress; product does not confine agents. (2) product does not start/observe/restrict agents in current phases; inter-agent content is unverified. This matches `threat-model.md` §5 and the local-only line in the project plan. Adequate for a clone-and-run reader.
+
+#### Link integrity
+
+No broken links in `README.md`. No references to removed paths (e.g. `docs/oss-draft/`).
+
+**Note outside H101-14 scope:** `docs/security/threat-model.md` line 3 still says "no code exists" — stale header, not introduced by this card.
+
+---
+
+### Phase 0 milestone — updated outstanding items
+
+**Now present:** licence, CONTRIBUTING, conduct, templates, CI, commit-identity guard, README disclosure, Go scaffold with passing tests.
+
+**Still outstanding:** threat-model header refresh; `PROJECT-PLAN.md` stack alignment with ADR 0001 (audit finding 1); agent file-protocol walkthrough (`definition.md` line 27); stale-lock recovery before Phase 2 "restart interface" milestone.
