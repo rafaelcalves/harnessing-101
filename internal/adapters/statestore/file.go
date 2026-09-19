@@ -226,7 +226,32 @@ func (s *FileStore) writeLocked(state persistedState) error {
 	if err := os.Rename(tmpPath, finalPath); err != nil {
 		return &domain.Error{Code: domain.ErrIOFailure, Detail: err.Error()}
 	}
+	// rename(2) is atomic, but the directory entry it changes is not
+	// guaranteed durable across a crash until the containing directory
+	// itself is fsynced (POSIX leaves this filesystem-dependent; ext4
+	// without a journal-ordering guarantee is the classic case). Without
+	// this, "successful Commit" could still lose the rename on a power
+	// loss, which is exactly the silent failure mode this adapter must
+	// not have: boundaries.md requires Commit to mean durable data, and
+	// AwaitingReview surviving a restart is the property this slice was
+	// asked to prove.
+	if err := fsyncDir(s.root); err != nil {
+		return &domain.Error{Code: domain.ErrIOFailure, Detail: "commit applied but durability unconfirmed: " + err.Error()}
+	}
 	return nil
+}
+
+func fsyncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	syncErr := d.Sync()
+	closeErr := d.Close()
+	if syncErr != nil {
+		return syncErr
+	}
+	return closeErr
 }
 
 func cloneSnapshot(snap domain.Snapshot) domain.Snapshot {
