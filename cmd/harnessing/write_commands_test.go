@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -166,5 +167,49 @@ func TestRun_CreateMissingTitleIsRejected(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "-title is required") {
 		t.Fatalf("stderr = %q, want it to name -title", errOut.String())
+	}
+}
+
+// TestRun_IOFailureRendersAsUncertainNotFailed is the H101-51 amendment
+// (UI-02): a write command's IOFailure must not read as a plain
+// "failed" — the underlying Commit can return exactly this code after a
+// write that already applied but whose durability fsync failed
+// (internal/adapters/statestore's writeLocked). There is no separate
+// error code distinguishing that from "nothing happened" (Kelly's
+// finding), so every IOFailure is rendered as uncertain, and the
+// request ID is surfaced so the caller can check state before deciding
+// whether to resubmit — not told to just retry.
+func TestRun_IOFailureRendersAsUncertainNotFailed(t *testing.T) {
+	dir := t.TempDir()
+	const wsID = "ws-iofail"
+
+	// Corrupt the persisted state file so the next Commit's read fails
+	// IOFailure. This does not reproduce the exact fsync-after-rename
+	// case, but it is the same error code with the same ambiguity Kelly
+	// found: nothing in the code distinguishes them today, so both must
+	// render the same way.
+	if code := run([]string{"create", "-workspace", dir, "-workspace-id", wsID,
+		"-caller", "engineer", "-request-id", "r1", "-task", "t1", "-title", "x"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("seed create failed unexpectedly")
+	}
+	statePath := dir + "/state.json"
+	if err := os.WriteFile(statePath, []byte("{not valid json"), 0o644); err != nil {
+		t.Fatalf("corrupt state file: %v", err)
+	}
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"create", "-workspace", dir, "-workspace-id", wsID,
+		"-caller", "engineer", "-request-id", "r2-uncertain", "-task", "t2", "-title", "y"}, &out, &errOut)
+	if code == 0 {
+		t.Fatal("create against a corrupt state file succeeded")
+	}
+	if !strings.Contains(errOut.String(), "IOFailure") {
+		t.Fatalf("stderr = %q, want it to name IOFailure", errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "UNCERTAIN") {
+		t.Fatalf("stderr = %q, want the UNCERTAIN warning, not a plain failure", errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "r2-uncertain") {
+		t.Fatalf("stderr = %q, want the request ID surfaced for recovery", errOut.String())
 	}
 }

@@ -45,7 +45,7 @@ func runRegister(args []string, stdout, stderr io.Writer) int {
 			ProfileID:   *profileID,
 		})
 		if err != nil {
-			_, _ = fmt.Fprintln(stderr, "harnessing register: "+describeError(err))
+			printCommandError(stderr, "register", *requestID, err)
 			return 1
 		}
 		printReceipt(stdout, "register", receipt)
@@ -87,7 +87,7 @@ func runUpdate(args []string, stdout, stderr io.Writer) int {
 			ProfileID:   profileID.Get(),
 		})
 		if err != nil {
-			_, _ = fmt.Fprintln(stderr, "harnessing update: "+describeError(err))
+			printCommandError(stderr, "update", *requestID, err)
 			return 1
 		}
 		printReceipt(stdout, "update", receipt)

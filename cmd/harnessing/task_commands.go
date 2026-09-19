@@ -40,7 +40,7 @@ func runCreate(args []string, stdout, stderr io.Writer) int {
 			AssigneeID: domain.AgentID(*assignee),
 		})
 		if err != nil {
-			_, _ = fmt.Fprintln(stderr, "harnessing create: "+describeError(err))
+			printCommandError(stderr, "create", *requestID, err)
 			return 1
 		}
 		printReceipt(stdout, "create", receipt)
@@ -79,7 +79,7 @@ func runTransition(args []string, stdout, stderr io.Writer) int {
 			Reason:     *reason,
 		})
 		if err != nil {
-			_, _ = fmt.Fprintln(stderr, "harnessing transition: "+describeError(err))
+			printCommandError(stderr, "transition", *requestID, err)
 			return 1
 		}
 		printReceipt(stdout, "transition", receipt)
@@ -121,7 +121,7 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 			Artifacts:            artifacts,
 		})
 		if err != nil {
-			_, _ = fmt.Fprintln(stderr, "harnessing report: "+describeError(err))
+			printCommandError(stderr, "report", *requestID, err)
 			return 1
 		}
 		printReceipt(stdout, "report", receipt)
@@ -160,7 +160,7 @@ func runAccept(args []string, stdout, stderr io.Writer) int {
 			ReviewNote:           *reviewNote,
 		})
 		if err != nil {
-			_, _ = fmt.Fprintln(stderr, "harnessing accept: "+describeError(err))
+			printCommandError(stderr, "accept", *requestID, err)
 			return 1
 		}
 		printReceipt(stdout, "accept", receipt)
@@ -199,7 +199,7 @@ func runReject(args []string, stdout, stderr io.Writer) int {
 			Reason:               *reason,
 		})
 		if err != nil {
-			_, _ = fmt.Fprintln(stderr, "harnessing reject: "+describeError(err))
+			printCommandError(stderr, "reject", *requestID, err)
 			return 1
 		}
 		printReceipt(stdout, "reject", receipt)

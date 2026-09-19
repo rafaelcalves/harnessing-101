@@ -129,3 +129,28 @@ func describeError(err error) string {
 func printReceipt(stdout io.Writer, cmdName string, receipt domain.Receipt) {
 	_, _ = fmt.Fprintf(stdout, "harnessing %s: OK (request %s, workspace revision %d)\n", cmdName, receipt.RequestID, receipt.CommittedRevision)
 }
+
+// printCommandError is the one error-rendering every WRITE command uses
+// (read-only `task` does not: it has no commit whose durability could be
+// uncertain). It exists because of UI-02: StateStore.Commit can return
+// IOFailure after the rename that applies a write already succeeded,
+// when only the follow-up directory fsync failed
+// (internal/adapters/statestore/file.go's writeLocked, "commit applied
+// but durability unconfirmed" — H101-12's fsync change). There is no
+// separate error code for that today (Kelly's finding, logged as H101-54
+// for Stanley's error taxonomy), so this is deliberately not a plain
+// "failed": it names the request ID and tells the caller to check rather
+// than retry, because retrying an uncertain write is exactly the harm —
+// a caller who assumes IOFailure means nothing happened and resubmits
+// may be creating a second real change, not recovering from a first one
+// that never landed.
+func printCommandError(stderr io.Writer, cmdName, requestID string, err error) {
+	_, _ = fmt.Fprintf(stderr, "harnessing %s: %s\n", cmdName, describeError(err))
+
+	var derr *domain.Error
+	if errors.As(err, &derr) && derr.Code == domain.ErrIOFailure {
+		_, _ = fmt.Fprintf(stderr,
+			"harnessing %s: UNCERTAIN, not necessarily failed — the write may have committed even though its durability could not be confirmed. Do NOT resubmit with a new request ID. Check state first (e.g. `harnessing task`), then retry with the SAME request ID (%s) if you need to: an identical retry replays the original result if it already committed, and only proceeds as a fresh attempt if it did not.\n",
+			cmdName, requestID)
+	}
+}

@@ -62,7 +62,7 @@ func runSend(args []string, stdout, stderr io.Writer) int {
 			ReplyToMessageID: optionalMessageID(replyTo.Get()),
 		})
 		if err != nil {
-			_, _ = fmt.Fprintln(stderr, "harnessing send: "+describeError(err))
+			printCommandError(stderr, "send", *requestID, err)
 			return 1
 		}
 		printReceipt(stdout, "send", receipt)
@@ -94,7 +94,7 @@ func runAck(args []string, stdout, stderr io.Writer) int {
 			MessageID: domain.MessageID(*messageID),
 		})
 		if err != nil {
-			_, _ = fmt.Fprintln(stderr, "harnessing ack: "+describeError(err))
+			printCommandError(stderr, "ack", *requestID, err)
 			return 1
 		}
 		printReceipt(stdout, "ack", receipt)
