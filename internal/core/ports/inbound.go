@@ -33,6 +33,7 @@ type Queries interface {
 	GetSnapshot(ctx context.Context, workspaceID domain.WorkspaceID) (domain.Snapshot, error)
 	GetAgent(ctx context.Context, id domain.AgentID) (domain.Agent, error)
 	GetTask(ctx context.Context, id domain.TaskID) (domain.Task, error)
+	GetMessage(ctx context.Context, id domain.MessageID) (domain.Message, error)
 	GetRun(ctx context.Context, id domain.RunID) (any, error)
 	GetOperation(ctx context.Context, id domain.OperationID) (any, error)
 	GetCapabilities(ctx context.Context, workspaceID domain.WorkspaceID) (any, error)

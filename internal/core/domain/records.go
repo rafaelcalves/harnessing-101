@@ -132,6 +132,29 @@ type Envelope struct {
 	ReplyToMessageID *MessageID
 }
 
+// Message is the durable record for one handoff. Delivery facts are separate
+// timestamps: a missing later timestamp is not inferred from an earlier one.
+// Acknowledgement is explicit recipient action and does not mean the work is
+// complete.
+type Message struct {
+	WorkspaceID      WorkspaceID
+	MessageID        MessageID
+	SenderAgentID    AgentID
+	RecipientAgentID AgentID
+	Kind             MessageKind
+	Body             string
+	CreatedAt        time.Time
+	TaskID           *TaskID
+	ReplyToMessageID *MessageID
+	Provenance       Provenance
+
+	QueuedAt       *time.Time
+	PublishedAt    *time.Time
+	ProcessedAt    *time.Time
+	AcknowledgedBy AgentID
+	AcknowledgedAt *time.Time
+}
+
 // Receipt is returned by a successful Commands.Execute.
 type Receipt struct {
 	RequestID         RequestID
@@ -159,6 +182,7 @@ type Snapshot struct {
 	Agents      []Agent
 	Tasks       []Task
 	TaskResults []TaskResult
+	Messages    []Message
 }
 
 // ExecutionSpec describes a local process an adapter may start. Resolving

@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
 	"github.com/rafaelcalves/harnessing-101/internal/core/ports"
@@ -301,6 +302,191 @@ func (e *Engine) GetTask(ctx context.Context, taskID domain.TaskID) (domain.Task
 		return domain.Task{}, &domain.Error{Code: domain.ErrNotFound, Detail: "task not found"}
 	}
 	return task, nil
+}
+
+// SendMessageRequest is the version 1 message command. SenderAgentID is the
+// message's claimed sender; Provenance separately records the host-scoped
+// caller and remains Unverified in this phase.
+type SendMessageRequest struct {
+	RequestID        domain.RequestID
+	MessageID        domain.MessageID
+	SenderAgentID    domain.AgentID
+	RecipientAgentID domain.AgentID
+	Kind             domain.MessageKind
+	Body             string
+	TaskID           *domain.TaskID
+	ReplyToMessageID *domain.MessageID
+}
+
+func (e *Engine) SendMessage(ctx context.Context, caller CallerScope, req SendMessageRequest) (domain.Receipt, error) {
+	if req.MessageID == "" || req.SenderAgentID == "" || req.RecipientAgentID == "" {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "messageID, senderAgentID, and recipientAgentID are required"}
+	}
+	if !validMessageKind(req.Kind) {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "kind must be Request, Inform, or Result"}
+	}
+	if !utf8.ValidString(req.Body) {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "body must be valid UTF-8"}
+	}
+
+	fp := fingerprint("SendMessage", req.MessageID, req.SenderAgentID, req.RecipientAgentID, req.Kind, req.Body, req.TaskID, req.ReplyToMessageID)
+	return e.commit(ctx, caller, req.RequestID, fp, func(snap *domain.Snapshot) ([]domain.Event, error) {
+		if _, _, found := findMessage(snap, req.MessageID); found {
+			return nil, &domain.Error{Code: domain.ErrConflict, Detail: "messageID already exists"}
+		}
+		if req.TaskID != nil {
+			if _, _, found := findTask(snap, *req.TaskID); !found {
+				return nil, &domain.Error{Code: domain.ErrNotFound, Detail: "task not found"}
+			}
+		}
+		if req.ReplyToMessageID != nil {
+			if _, _, found := findMessage(snap, *req.ReplyToMessageID); !found {
+				return nil, &domain.Error{Code: domain.ErrNotFound, Detail: "reply-to message not found"}
+			}
+		}
+
+		now := e.clock.WallNow()
+		queuedAt := now
+		message := domain.Message{
+			WorkspaceID:      e.workspaceID,
+			MessageID:        req.MessageID,
+			SenderAgentID:    req.SenderAgentID,
+			RecipientAgentID: req.RecipientAgentID,
+			Kind:             req.Kind,
+			Body:             req.Body,
+			CreatedAt:        now,
+			TaskID:           cloneID(req.TaskID),
+			ReplyToMessageID: cloneID(req.ReplyToMessageID),
+			Provenance:       e.claimedProvenance(caller, now),
+			QueuedAt:         &queuedAt,
+		}
+		snap.Messages = append(snap.Messages, message)
+		ev, err := e.event(ctx, "MessageQueued", now, string(req.MessageID))
+		if err != nil {
+			return nil, err
+		}
+		return []domain.Event{ev}, nil
+	})
+}
+
+// AcknowledgeMessageRequest records the addressed recipient's explicit
+// acknowledgement. Repeating it is a successful durable no-op with no second
+// acknowledgement event.
+type AcknowledgeMessageRequest struct {
+	RequestID domain.RequestID
+	MessageID domain.MessageID
+}
+
+func (e *Engine) AcknowledgeMessage(ctx context.Context, caller CallerScope, req AcknowledgeMessageRequest) (domain.Receipt, error) {
+	fp := fingerprint("AcknowledgeMessage", req.MessageID)
+	return e.commit(ctx, caller, req.RequestID, fp, func(snap *domain.Snapshot) ([]domain.Event, error) {
+		idx, message, found := findMessage(snap, req.MessageID)
+		if !found {
+			return nil, &domain.Error{Code: domain.ErrNotFound, Detail: "message not found"}
+		}
+		if message.RecipientAgentID != caller.AgentID {
+			return nil, &domain.Error{Code: domain.ErrDenied, Detail: "only the message recipient may acknowledge it"}
+		}
+		if message.AcknowledgedAt != nil {
+			return nil, nil
+		}
+
+		now := e.clock.WallNow()
+		snap.Messages[idx].AcknowledgedBy = caller.AgentID
+		snap.Messages[idx].AcknowledgedAt = &now
+		ev, err := e.event(ctx, "MessageAcknowledged", now, string(req.MessageID))
+		if err != nil {
+			return nil, err
+		}
+		return []domain.Event{ev}, nil
+	})
+}
+
+// MessageDeliveryRequest identifies a delivery fact recorded by the host.
+type MessageDeliveryRequest struct {
+	RequestID domain.RequestID
+	MessageID domain.MessageID
+}
+
+// RecordMessagePublished records the mailbox adapter making a complete
+// envelope available. It is deliberately separate from queued and
+// acknowledged: publication does not mean the recipient saw or accepted it.
+func (e *Engine) RecordMessagePublished(ctx context.Context, req MessageDeliveryRequest) (domain.Receipt, error) {
+	return e.recordDeliveryFact(ctx, req, "MessagePublished", func(message *domain.Message, now time.Time) bool {
+		if message.PublishedAt != nil {
+			return false
+		}
+		message.PublishedAt = &now
+		return true
+	})
+}
+
+// RecordMessageProcessed records controller ingestion separately from
+// publication and recipient acknowledgement.
+func (e *Engine) RecordMessageProcessed(ctx context.Context, req MessageDeliveryRequest) (domain.Receipt, error) {
+	return e.recordDeliveryFact(ctx, req, "MessageProcessed", func(message *domain.Message, now time.Time) bool {
+		if message.ProcessedAt != nil {
+			return false
+		}
+		message.ProcessedAt = &now
+		return true
+	})
+}
+
+func (e *Engine) recordDeliveryFact(ctx context.Context, req MessageDeliveryRequest, eventKind string, apply func(*domain.Message, time.Time) bool) (domain.Receipt, error) {
+	fp := fingerprint(eventKind, req.MessageID)
+	return e.commit(ctx, CallerScope{}, req.RequestID, fp, func(snap *domain.Snapshot) ([]domain.Event, error) {
+		idx, message, found := findMessage(snap, req.MessageID)
+		if !found {
+			return nil, &domain.Error{Code: domain.ErrNotFound, Detail: "message not found"}
+		}
+		now := e.clock.WallNow()
+		if !apply(&message, now) {
+			return nil, nil
+		}
+		snap.Messages[idx] = message
+		ev, err := e.event(ctx, eventKind, now, string(req.MessageID))
+		if err != nil {
+			return nil, err
+		}
+		return []domain.Event{ev}, nil
+	})
+}
+
+// GetMessage returns all four delivery facts without collapsing them into a
+// status. The host/mailbox integration records publication and processing via
+// the explicit delivery-fact methods above.
+func (e *Engine) GetMessage(ctx context.Context, messageID domain.MessageID) (domain.Message, error) {
+	snap, err := e.store.Load(ctx, e.workspaceID)
+	if err != nil {
+		return domain.Message{}, err
+	}
+	_, message, found := findMessage(&snap, messageID)
+	if !found {
+		return domain.Message{}, &domain.Error{Code: domain.ErrNotFound, Detail: "message not found"}
+	}
+	return message, nil
+}
+
+func validMessageKind(kind domain.MessageKind) bool {
+	return kind == domain.MessageRequest || kind == domain.MessageInform || kind == domain.MessageResult
+}
+
+func findMessage(snap *domain.Snapshot, id domain.MessageID) (int, domain.Message, bool) {
+	for i, message := range snap.Messages {
+		if message.MessageID == id {
+			return i, message, true
+		}
+	}
+	return 0, domain.Message{}, false
+}
+
+func cloneID[T ~string](id *T) *T {
+	if id == nil {
+		return nil
+	}
+	copy := *id
+	return &copy
 }
 
 // loadPendingDecision applies the shared precondition checks for Accept

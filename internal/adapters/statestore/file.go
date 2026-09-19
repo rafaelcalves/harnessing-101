@@ -268,6 +268,33 @@ func cloneSnapshot(snap domain.Snapshot) domain.Snapshot {
 	for i := range out.TaskResults {
 		out.TaskResults[i].Artifacts = append([]string(nil), snap.TaskResults[i].Artifacts...)
 	}
+	out.Messages = append([]domain.Message(nil), snap.Messages...)
+	for i := range out.Messages {
+		if snap.Messages[i].TaskID != nil {
+			id := *snap.Messages[i].TaskID
+			out.Messages[i].TaskID = &id
+		}
+		if snap.Messages[i].ReplyToMessageID != nil {
+			id := *snap.Messages[i].ReplyToMessageID
+			out.Messages[i].ReplyToMessageID = &id
+		}
+		if snap.Messages[i].QueuedAt != nil {
+			at := *snap.Messages[i].QueuedAt
+			out.Messages[i].QueuedAt = &at
+		}
+		if snap.Messages[i].PublishedAt != nil {
+			at := *snap.Messages[i].PublishedAt
+			out.Messages[i].PublishedAt = &at
+		}
+		if snap.Messages[i].ProcessedAt != nil {
+			at := *snap.Messages[i].ProcessedAt
+			out.Messages[i].ProcessedAt = &at
+		}
+		if snap.Messages[i].AcknowledgedAt != nil {
+			at := *snap.Messages[i].AcknowledgedAt
+			out.Messages[i].AcknowledgedAt = &at
+		}
+	}
 	return out
 }
 
