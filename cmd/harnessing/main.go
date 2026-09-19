@@ -1,11 +1,11 @@
-// Command harnessing is the CLI adapter entry point. Phase 0 provides a
-// version stub only; no other command exists yet. See
-// docs/architecture/boundaries.md — CLI flags, exit codes, and rendering
-// stay outside the core.
+// Command harnessing is the CLI adapter. It is a thin wrapper over
+// internal/host.Capabilities: every command constructs Capabilities via
+// host.Open and calls only its exported methods. CLI flags, exit codes,
+// and rendering stay here, outside the core, per
+// docs/architecture/boundaries.md.
 package main
 
 import (
-	"fmt"
 	"os"
 )
 
@@ -13,10 +13,5 @@ import (
 var version = "dev"
 
 func main() {
-	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version") {
-		fmt.Println("harnessing " + version)
-		return
-	}
-	fmt.Fprintln(os.Stderr, "harnessing: no commands are implemented yet (Phase 0 skeleton)")
-	os.Exit(1)
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
