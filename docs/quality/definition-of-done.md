@@ -684,6 +684,73 @@ Kevin exposes them on `Capabilities` with no caller parameter (`host.go` lines 6
 
 ### Follow-up cards
 
-- **H101-31** (existing): discharge exit item 1.
 - **H101-34**: forbidden-fixture CI step must assert exit code 1, not any non-zero.
 - **H101-22** (existing): mailbox authority for delivery-fact recorders.
+
+---
+
+## H101-31 acceptance review (2026-09-19)
+
+Reviewed commit `fc18dde` (`TestPhase1_ProductCycleThroughComposition`). Test passes; file imports only `domain`, `task`, `host` — no `statestore`.
+
+**Verdict: ACCEPTED**
+
+**Phase 1 exit item 1: SATISFIED**
+
+**All six Phase 1 exit items are now discharged.** Phase 1 is exit-ready pending milestone review (items 1–6); H101-34 remains belt-and-suspenders follow-up, not a blocker per prior ruling.
+
+### Does "hand off" discharge on a task-linked message?
+
+**Yes.** Item 1 does not mean reassignment.
+
+| Source | What "hand off" means |
+| --- | --- |
+| Item 1 wording (this doc) | Comma-separated step between **assign** and **report result** — coordination between agents, not a synonym for changing `AssigneeID` |
+| `definition.md` line 11 | "A handoff reaches a **named recipient**, remains available across sessions, and **links to the task**" — message semantics |
+| `definition.md` line 17 | Minimum cycle: assign, **hand off**, blocker, review — handoff is distinct from assign |
+| Command surface | `AssigneeID` set only at `CreateTask` (`engine.go` lines 72–75); no reassignment command exists |
+
+The test's task-linked `SendMessage` to `analystID` with `TaskID` set, followed by recipient `AcknowledgeMessage`, is the handoff Angela's product definition describes. **Reassignment would be a separate capability** ("correct ownership," `definition.md` line 23) — a `boundaries.md`/product gap if required later, **not** a reason to fail item 1 today.
+
+Claudio's declared assumption is **correct**, not a workaround.
+
+### Cycle coverage
+
+| Item 1 step | Test evidence (`phase1_cycle_test.go`) |
+| --- | --- |
+| Assign | `CreateTask` with `AssigneeID` (lines 44–48) |
+| Hand off | Task-linked message + ack (lines 57–67) |
+| Report result | `ReportTaskResult` ×2 (lines 69–74, 89–94) |
+| Human reject | `RejectTaskResult` (lines 75–80) |
+| Human accept | `AcceptTaskResult` on `cycle-result-2` (lines 95–99) |
+| Acknowledge | Included in handoff (lines 63–67) |
+| ≥2 registered agents + human | Engineer, analyst registered; reviewer is human authority set at `Open` (lines 25, 32–41) |
+| Composition only | No store/engine imports (lines 12–14) |
+| Reopen | `Close` + `host.Open` (lines 100–110) |
+
+**Not in item 1:** blocker cycle (`definition.md` line 17 includes it; item 1 list does not). Not a fail.
+
+### God question 1 — reject branch proof
+
+**Sufficient.** After reject, test asserts `Doing` (lines 81–87), re-reports under new `cycle-result-2`, accepts that ID, reopen asserts `Done` with `cycle-result-2` (lines 121–122). That proves reject returned the task for rework and the second result was accepted — not a no-op visit.
+
+**Could be stronger:** assert rejected result remains in history with `Rejected` decision — not exposed on `GetTask` today. Not required to discharge item 1.
+
+### God question 2 — reopen gaps
+
+**Adequate for item 1.** Re-verified after reopen: both agent registrations, task `Done` + correct `CurrentResultID`, handoff `TaskID` link, acknowledgement by analyst.
+
+**Not re-checked (acceptable gaps):** message body text, publication/process delivery facts (test never records them; ack-before-publish is valid per boundaries), assignee field on task, provenance fields. None are required by item 1 wording.
+
+### God question 3 — "no other gap" claim
+
+**Treat as unverified; no second gap blocks item 1.**
+
+| Potential gap | Blocks item 1? |
+| --- | --- |
+| No reassignment command | **No** — handoff is message-based (above) |
+| `CreateTask` without registered assignee | **No** — test registers agents first; known H101-12 follow-up |
+| No `RecordMessagePublished`/`Processed` in cycle | **No** — not required for handoff proof |
+| Blocker path omitted | **No** — not in item 1 list |
+
+No evidence Claudio worked around an unrecognised second gap.
