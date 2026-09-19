@@ -306,3 +306,95 @@ No broken links in `README.md`. No references to removed paths (e.g. `docs/oss-d
 **Now present:** licence, CONTRIBUTING, conduct, templates, CI, commit-identity guard, README disclosure, Go scaffold with passing tests.
 
 **Still outstanding:** threat-model header refresh; `PROJECT-PLAN.md` stack alignment with ADR 0001 (audit finding 1); agent file-protocol walkthrough (`definition.md` line 27); stale-lock recovery before Phase 2 "restart interface" milestone.
+
+---
+
+## H101-18 acceptance review (2026-09-19)
+
+Reviewed commit `3ff78eb` (Phase 1 slice 2 — messages with recipient-scoped acknowledgement). Re-ran `go test -count=1 ./internal/core/task/ -run 'TestSend|TestAck'` — pass.
+
+**Verdict: ACCEPTED WITH FOLLOW-UP**
+
+### DoD checklist (code)
+
+| # | Result | Note |
+| --- | --- | --- |
+| 1 Traceability | Pass | Implements `boundaries.md` acknowledgement command and four delivery facts (`lines 32, 57`) |
+| 3 Honest verification | Pass | Tests assert `ErrDenied` on wrong ack caller; restart test reads from disk |
+| 4 Scope discipline | Pass | Mailbox filesystem I/O deferred; explicit host recorders documented |
+| 6 Cross-artefact consistency | Pass with follow-up | Core semantics match; host-integration gaps deferred to Phase 2 (see below) |
+| 7 QA sign-off | Pass | This section |
+| 11 Tests | Pass | Three named tests prove what they claim (see per-test notes) |
+| 12 Hexagonal boundaries | Pass | No new adapter imports in core |
+| 13 Local-only | Pass | No network imports added |
+| 14 Commit identity | Pass | `3ff78eb` authored `rafael.ca.dev@gmail.com` |
+
+### 1. Four delivery facts — never inferred from one another
+
+**Pass in code.**
+
+| Fact | Set only by | Code |
+| --- | --- | --- |
+| Queued | `SendMessage` | `engine.go` lines 349–361 — sets `QueuedAt` only |
+| Published | `RecordMessagePublished` | `engine.go` lines 414–421 — sets `PublishedAt` only |
+| Processed | `RecordMessageProcessed` | `engine.go` lines 426–432 — sets `ProcessedAt` only |
+| Acknowledged | `AcknowledgeMessage` | `engine.go` lines 395–396 — sets `AcknowledgedBy`/`AcknowledgedAt` only |
+
+Zero-value defaults are nil pointers and empty `AcknowledgedBy` (`records.go` lines 151–155). No code copies an earlier timestamp into a later field. `GetMessage` returns all fields without synthesis (`engine.go` lines 456–468).
+
+`TestSendMessageAndRecipientAcknowledgement` (`message_test.go` lines 31–42) asserts each stage independently — the test does what its name claims.
+
+**Ack before publish is allowed** (`TestAcknowledgedMessageSurvivesRestart` acknowledges without calling publish/process). Matches `boundaries.md` line 57.
+
+### 2. Recipient scoping — bypass routes
+
+**No bypass through `AcknowledgeMessage` API.**
+
+Recipient check: stored `RecipientAgentID` must equal `caller.AgentID` (`engine.go` lines 387–388). Wrong caller → `Denied` (`message_test.go` lines 48–51). `TestSendMessageAndRecipientAcknowledgement` proves this.
+
+**Same class as H101-19 (host bypass):** a host calling `StateStore.Commit` with a custom `Mutate` that sets `AcknowledgedAt` bypasses recipient checks — identical to the task-lifecycle bypass noted in H101-17. Out of slice scope; **H101-19** remains the obligation.
+
+**Recipient field on send:** `RecipientAgentID` is required non-empty (`engine.go` line 322) and persisted; acknowledgement compares against the stored value, not a request field. No ack route through unvalidated recipient — the recipient is whatever `SendMessage` committed.
+
+**Undeclared gap (not an ack bypass):** `SenderAgentID` in the request is not checked against `caller.AgentID` (`engine.go` lines 353–354). Per `boundaries.md` line 34, envelope agent IDs are routing claims; `Provenance` records the host-scoped caller separately. Acceptable if documented; should not be read as authenticated authorship.
+
+### 3. "Zero divergences" — unverified; findings
+
+Claudio declared zero divergences. **Cold read finds at least three** that should have been declared:
+
+| # | Divergence | Ruling |
+| --- | --- | --- |
+| 1 | `RecordMessagePublished` / `RecordMessageProcessed` are host-callable engine methods, not `Commands` port operations (`boundaries.md` line 19 lists `SendMessage` and `AcknowledgeMessage` only) | **Accept for Phase 1** — pragmatic stub until Mailbox adapter exists; must be declared |
+| 2 | Delivery recorders use `CallerScope{}` (`engine.go` line 438), so receipt replay is scoped to empty agent ID, not the host identity | **Minor** — follow-up when host assembly lands |
+| 3 | No ordering guard: host may call `RecordMessageProcessed` before `RecordMessagePublished`, or skip publish entirely | **Accept for Phase 1** — Phase 2 mailbox obligation (see §4) |
+
+Not a reject — Kevin's five were structural; these are integration stubs. **Declaring zero was incorrect.**
+
+### 4. Host-driven delivery recorders (mailbox stub)
+
+**Acceptable for Phase 1; Phase 2 obligation.**
+
+The engine intentionally exposes `RecordMessagePublished` / `RecordMessageProcessed` for the host to drive (`engine.go` lines 411–434) because Mailbox is a Phase 2 adapter stub. Facts can be set out of order or skipped by a careless host today.
+
+**This parallels stale-lock recovery (H101-17):** does not block accepting this slice's core semantics, but **Phase 2 mailbox integration must not pass milestone review** until:
+
+- publish/process are driven only by the Mailbox adapter in causal order (queued → published → processed per `boundaries.md` line 57);
+- file-protocol `MessageAcknowledgement` ingress shares the same `AcknowledgeMessage` checks (`boundaries.md` lines 59–60).
+
+Acknowledgement before publication remains valid per boundaries; skipping publication while showing "processed" is not.
+
+### Test assessment
+
+| Test | Proves |
+| --- | --- |
+| `TestSendMessageAndRecipientAcknowledgement` | Four facts stay separate; wrong recipient denied; duplicate ack preserves timestamp |
+| `TestAcknowledgedMessageSurvivesRestart` | Ack + queued facts survive process restart |
+| `TestSendMessageUnknownReferencesNotFound` | Unknown `taskID` / `replyToMessageID` → `NotFound` |
+
+**Not economically required now:** fault-injection for delivery-fact ordering violations (host misbehaviour); H101-19 mutate bypass (host assembly card).
+
+### Suggested follow-up cards
+
+- **H101-19** (existing): host must route all mutations through `Engine`, never raw `Mutate` for domain rules.
+- **Phase 2 mailbox card:** wire `RecordMessage*` from adapter only; enforce publish-before-process; implement file `MessageAcknowledgement` ingress.
+- **RegisterAgent validation:** recipient/sender IDs still unregistered (continuation from H101-12 divergence c).
