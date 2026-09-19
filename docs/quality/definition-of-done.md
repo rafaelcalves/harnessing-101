@@ -40,12 +40,23 @@ Derived from `docs/PROJECT-PLAN.md` phase descriptions. Where the plan's one-lin
 | Phase | Checkable exit | Gap |
 | --- | --- | --- |
 | **0** | `CONTRIBUTING.md`, licence, conduct, templates, CI, commit-identity guard, accepted stack ADR, threat-model baseline; plan updated to match ADR | "Stranger could contribute" is subjective; Kevin/Ryan artefacts in flight |
-| **1** | ≥2 agents, full task/message cycle, restart durability, port APIs + fake adapters, zero network, tests green | Plan omits agent count; product §2 implies two agents |
+| **1** | See **Phase 1 exit (revised 2026-09-19)** below — Stanley H101-25 adds composition boundary, CI allowlist, and assembly authorization tests before phase acceptance | Was: port APIs + unit tests only; H101-19 containment moved in from Phase 2 |
 | **2** | CLI completes product §2 cycle; throwaway adapter passes contract tests; Phase 3 ops return `Unsupported` | "Usable for real work" — anchor to §2 walkthrough |
 | **3** | Start/stop/budget/crash-recovery on supported platforms; process-tree termination; misbehaviour → `RecoveryRequired` | Platform matrix **UNKNOWN** (`boundaries.md` line 65) |
 | **4** | Clean-machine install, observed egress audit, new-joiner docs, version tag | Needs written observation protocol |
 
 **Weakest phase exit:** Phase 0 — "a repository a stranger could contribute to" has no objective threshold, and the plan still recommends TypeScript while ADR 0001 accepts Go (see audit).
+
+### Phase 1 exit (revised 2026-09-19, per H101-25)
+
+Phase 1 is **not accepted** until all of the following pass in CI on `main`:
+
+1. **Product cycle** — ≥2 registered agents, one human, full task/message cycle (assign, hand off, report result, human accept/reject, acknowledge) through the **headless composition** entry point, with durable state surviving workspace reopen.
+2. **Assembly authorization** — negative tests through the returned capabilities only: direct Doing→Done rejected; agent `AcceptTaskResult` rejected; wrong-recipient `AcknowledgeMessage` rejected; persisted state unchanged after each denial; legitimate accept and ack survive reopen; agent ingress cannot set human-review authority (obligation 3).
+3. **Containment** — production packages outside an approved allowlist do not import `internal/adapters/statestore` or construct `ports.CommitRequest`; CI allowlist check green, including a **forbidden fixture** that must fail the check (obligation 2).
+4. **Composition surface** — shipped entry point returns only command/query capabilities plus shutdown; no `FileStore`, `StateStore`, `CommitRequest` builder, or recoverable concrete store (obligation 1).
+5. **Unit tests** — engine/statestore unit tests may still construct engines directly for domain rules; they do not substitute for items 1–4.
+6. **Zero network** — unchanged; core module has no network imports.
 
 ---
 
@@ -398,3 +409,149 @@ Acknowledgement before publication remains valid per boundaries; skipping public
 - **H101-19** (existing): host must route all mutations through `Engine`, never raw `Mutate` for domain rules.
 - **Phase 2 mailbox card:** wire `RecordMessage*` from adapter only; enforce publish-before-process; implement file `MessageAcknowledgement` ingress.
 - **RegisterAgent validation:** recipient/sender IDs still unregistered (continuation from H101-12 divergence c).
+
+---
+
+## H101-27 — Stanley H101-25 obligations: checkability and Phase 1 exit (2026-09-19)
+
+Reviewed `docs/architecture/h101-25-state-store-authority.md` (`f68367f`). Judged checkability only; did not review security-honesty (H101-26) or H101-22.
+
+**Phase 1 exit changes: yes.** See **Phase 1 exit (revised 2026-09-19)** above. H101-19 containment moves from Phase 2 into Phase 1 acceptance. Phase 1 is not done when engine unit tests pass alone.
+
+### Obligation 1 — private headless composition
+
+**Verdict: CHECKABLE WITH A STATED TEST**
+
+Stanley's wording is directionally right but needs one concrete enforcement mechanism beyond prose.
+
+| Check | What proves it |
+| --- | --- |
+| Surface shape | `go build ./...` with composition package exporting only a capability interface + `Close`/`Shutdown`; integration test lists methods on returned type — no `Commit`, `Open`, or store types |
+| Import containment | CI allowlist (obligation 2): ingress/CLI packages must not import `statestore` or `ports` outbound persistence |
+| Detached query results | Assembly test mutates returned task/message structs after `GetTask`/`GetMessage` and asserts store state unchanged on reload |
+| **Store recovery** | **Import allowlist + unexported concrete type**, not a one-off type assertion test |
+
+**Recovery question (god ask):** A type assertion back to `*FileStore` is easy to write and easy to forget. The durable check is: (a) composition returns an interface defined in the composition package; (b) concrete `*workspace` (or similar) is **unexported**; (c) CI fails if any non-allowlisted package imports `statestore`. A `testdata/forbidden/recover_store_test.go` that imports `statestore` and calls `Open` demonstrates the allowlist fires. That catches the real failure mode (new package reaching persistence), not a forgotten assertion in one test file.
+
+A narrower interface over an **exported** concrete store remains insufficient even with a passing assertion test today.
+
+### Obligation 2 — CI dependency/call allowlist (resolved symbols)
+
+**Verdict: NOT CHECKABLE AS WRITTEN today. CHECKABLE WITH A STATED TEST using a weaker rule.**
+
+**God ask — can we build resolved-symbol + method-value checking with Go tooling and zero module dependencies?**
+
+| Layer | Feasible today? | Concrete check |
+| --- | --- | --- |
+| **Package import allowlist** | **Yes** | Shell + `go list -f '{{.ImportPath}} {{.Imports}}' ./...`; fail if any package outside `{statestore, core/task, core/ports, headless/host, …}` imports `…/statestore` or outbound `ports` mutation paths |
+| **Text grep for `.Commit(`** | Yes but **insufficient** — Stanley is correct; method values and wrappers evade it |
+| **Resolved symbols + method-value references** | **Not without new tooling** | Needs a custom checker using `go/parser` + `go/ast` (stdlib-only, ~100–200 lines) **or** a dev dependency on `golang.org/x/tools/go/analysis`. Not present in repo today; aspirational until implemented |
+| **Forbidden fixture** | **Yes** | `testdata/forbidden/` (or similar) with a package that imports `statestore` and calls `Commit`; CI script runs checker and **requires non-zero exit** on that path, zero exit on production tree |
+| **Test-only exception** | **Yes** | Allowlist explicitly includes `internal/adapters/statestore` and `*_test.go` in statestore package only |
+
+**Weaker check that is real now:** package import allowlist + forbidden fixture that must fail. Promote to full AST call analysis when the stdlib checker lands; do not claim Phase 1 exit on grep alone.
+
+This is the same class of fix as replacing "stranger could contribute" with a file checklist: name the weaker measurable rule until the stronger one exists.
+
+### Obligation 3 — negative assembly authorization tests
+
+**Verdict: CHECKABLE AS WRITTEN**
+
+Standard integration tests through the composition entry point, once obligation 1 exists:
+
+| Scenario | Expected | State after denial |
+| --- | --- | --- |
+| Direct Doing→Done via generic transition | `InvalidArgument` | Unchanged |
+| Agent `AcceptTaskResult` | `Denied` | `AwaitingReview` |
+| Wrong-recipient `AcknowledgeMessage` | `Denied` | No ack facts |
+| Legitimate accept + ack | Success | Survives workspace reopen |
+| Agent ingress selects `IsHumanReviewer: true` | **Denied** at host policy boundary before engine | Unchanged |
+
+Concrete proof: `internal/headless` (or `host`) assembly test package opens a temp workspace via composition API only, runs each scenario, reloads store through composition queries. Maps directly to existing engine behaviour already proven in unit tests; the new requirement is the **entry path**, not new domain rules.
+
+### Cost claim — rewrite required?
+
+**Mostly true for production code; false for "no test work."**
+
+| Stanley claim | Verdict |
+| --- | --- |
+| Engine command bodies unchanged | **True** — authorization stays in `engine.go`; composition wraps, does not rewrite |
+| File format + transaction semantics unchanged | **True** — `Mutate` closure shape stands per H101-25 |
+| Statestore contract tests unchanged | **True** — remain test-only exception |
+| Tests that build engines directly unchanged | **True** — `newEngine` in `engine_test.go` can remain as unit tests |
+| No assembly work | **False** — new composition package, assembly tests, and CI checker are **additive** obligations; unit tests cannot substitute |
+
+Kevin's registry slice can use the same composition boundary without a storage redesign, as Stanley states.
+
+### Summary table
+
+| Obligation | Verdict | Concrete check |
+| --- | --- | --- |
+| 1 — private composition | CHECKABLE WITH A STATED TEST | Capability-only API; unexported concrete; import allowlist; detached-query assembly test |
+| 2 — CI allowlist | NOT CHECKABLE AS WRITTEN (full symbol resolution); **CHECKABLE WITH A STATED TEST** (import allowlist + forbidden fixture) | `go list` import gate now; stdlib AST checker later; fixture must fail |
+| 3 — assembly auth negatives | CHECKABLE AS WRITTEN | Integration tests through composition only |
+
+---
+
+## H101-24 acceptance review (2026-09-19)
+
+Reviewed commit `2841635` (Phase 1 slice 3 — agent registry). Re-ran `go test -count=1 ./internal/core/task/ -run 'Agent|Register|Update'` — nine tests pass.
+
+**Verdict: ACCEPTED WITH FOLLOW-UP**
+
+### DoD checklist (code)
+
+| # | Result | Note |
+| --- | --- | --- |
+| 1 Traceability | Pass | Implements `boundaries.md` line 24 RegisterAgent/UpdateAgent |
+| 3 Honest verification | Pass | Denied paths assert state unchanged (`agent_test.go` lines 53–55, 156–158) |
+| 6 Cross-artefact consistency | Pass with follow-up | Registry semantics match; `CreateTask` still accepts unregistered assignee (see below) |
+| 11 Tests | Pass | Nine named tests prove claimed behaviours |
+| 12–14 | Pass | No new boundary violations; commit identity correct |
+
+### Kevin's five decisions — verified
+
+| # | Claim | Verdict | Evidence |
+| --- | --- | --- | --- |
+| 1 | Existing agent ID → unconditional `Conflict`; idempotency via store replay only | **Pass** | `engine.go` lines 355–361 always `Conflict` if ID exists in mutate. Store replays same `(CallerAgentID, RequestID)` + fingerprint **before** mutate (`file.go` lines 136–138). `TestRegisterAgent_ExistingIDIsConflict` (new request ID) + `TestRegisterAgent_SameRequestIDReplays` |
+| 2 | Agent ID structurally unpatchable | **Pass today** | `UpdateAgentRequest` has no ID field (`engine.go` lines 322–327); mutate only touches `DisplayName`/`ProfileID` (lines 401–406). `TestUpdateAgent_PatchesOnlyGivenFields` checks ID unchanged after patch |
+| 3 | `canWriteAgentRecord` = self or human reviewer | **Pass** | `engine.go` lines 338–340; denied in `TestRegisterAgent_OtherAgentDenied`, `TestUpdateAgent_OtherAgentDenied`; allowed in human tests |
+| 4 | `Provenance` + `LastUpdatedProvenance`, `Unverified` throughout | **Pass** | `records.go` lines 44–54; `agent_test.go` lines 34–38, 128–130 |
+| 5 | No deregistration | **Pass** | No command implemented; matches boundaries command set |
+
+### `IsHumanReviewer` — acceptable given H101-25 containment?
+
+**Yes for this slice. No registry-specific mechanism beyond general containment.**
+
+Reusing `caller.IsHumanReviewer` is the right primitive (`engine.go` lines 329–337). A forged human flag lets a caller update **any** agent record (`canWriteAgentRecord` is global, not per-target-role). The roster is a higher-value target than a single task — god's concern is valid.
+
+This is **not** fixed inside the registry slice. It is the same host-policy hole Stanley named in H101-25. **H101-27 Phase 1 exit obligation 3** must include assembly proof that **agent ingress cannot receive `IsHumanReviewer: true`**, covering registry paths (`RegisterAgent`/`UpdateAgent` for another agent's ID) as well as accept/ack.
+
+No fourth authority mechanism in the engine is needed or desirable.
+
+### Decision 1 — store replay narrower than assumed?
+
+**No.** Replay short-circuits before `Mutate` with matching fingerprint. A replayed successful register returns the original receipt without re-hitting "already registered." Different payload + same request ID → `Conflict` at store (`file.go` line 140), not tested by name but follows established statestore contract.
+
+### Decision 2 — test that fails if ID becomes patchable?
+
+**No such test exists.** Structural unpatchability via missing struct field is true today; `TestUpdateAgent_PatchesOnlyGivenFields` only checks ID unchanged after a legitimate display-name patch. Adding `NewAgentID *string` to `UpdateAgentRequest` would not fail any test until someone also added assignment code.
+
+**Follow-up (low priority):** optional compile-time guard is unnecessary; a code-review convention plus the struct comment is sufficient for Phase 1. Not a reject.
+
+### "Zero divergences" — unverified; one found
+
+| Gap | Note |
+| --- | --- |
+| **`CreateTask` does not require registered `AssigneeID`** | `engine.go` lines 72–75 still accept any assignee. Registry exists but tasks are not wired to it. Undeclared; continuation of H101-12 divergence (c). Not introduced by this slice, but zero divergences claim is **incorrect** if counted against the full Phase 1 surface |
+
+Engine-wide `StateStore.Commit` bypass remains logged (H101-19 / H101-25).
+
+### Test assessment
+
+All nine tests prove what their names claim. No restart-durability test for registry — not required by card; agents persist via same `state.json` path as tasks.
+
+### Follow-up cards
+
+- **H101-25 assembly** (existing): agent ingress cannot set `IsHumanReviewer`; include roster hijack scenario (`UpdateAgent` on another agent's ID with forged human flag denied at host).
+- **CreateTask assignee validation** (existing): require `AssigneeID` registered before task create, or document intentional deferral.
