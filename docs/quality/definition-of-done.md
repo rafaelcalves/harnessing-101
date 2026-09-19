@@ -626,3 +626,64 @@ One divergence, stated upfront: no `CommitRequest` call-site detection inside pe
 1. Collapse allowlist to **one** store-constructor package with inline justification.
 2. Optional: allowlist paths must exist in tree.
 3. H101-19 obligations 1 and 3 (composition + assembly tests) — still required for item 3 completion.
+
+---
+
+## H101-19 obligations 1 and 3 acceptance review (2026-09-19)
+
+Reviewed commit `8dc828f` (composition boundary + assembly tests). Allowlist hygiene from `ea4425c` verified. Seven assembly tests pass (`go test -count=1 ./internal/host/`).
+
+**Verdict: ACCEPTED WITH FOLLOW-UP**
+
+### Phase 1 exit items 1–6
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| **1 Product cycle** | **UNSATISFIED** | H101-31 (end-to-end cycle through composition) still in flight. This card delivers the boundary, not the full ≥2-agent walkthrough |
+| **2 Assembly authorization** | **SATISFIED** | Seven tests through `host.Capabilities` only (`host_test.go`): Doing→Done rejected; agent accept denied; wrong-recipient ack denied; state unchanged on denials; accept+ack survive reopen; agent ingress cannot forge human authority (with positive control for real reviewer) |
+| **3 Containment** | **SATISFIED** | Import allowlist + forbidden fixture (`ea4425c`); single `internal/host` door with inline justification. `CommitRequest` inside `host` still not statically proven — accepted H101-27 limitation. **H101-34 CI assertion weakness does not block discharge** (see below) |
+| **4 Composition surface** | **SATISFIED** | `Capabilities` interface only; unexported `workspace` (`host.go` lines 78–85); no `IsHumanReviewer` on any export; queries cloned (`cloneTask`/`cloneMessage`/`cloneAgent`); `TestAssembly_QueryResultsAreDetached` + `TestAssembly_CapabilitiesExposeNoPersistenceMethods` |
+| **5 Unit tests** | **SATISFIED** | `internal/core/task` unit tests unchanged and supplementary |
+| **6 Zero network** | **SATISFIED** | Per god verification on `internal/host` deps |
+
+**Items 2 and 4 discharge with `8dc828f`.** Item 3 discharges with `ea4425c` + `a34f51d` + this card's composition proof. Item 1 waits on H101-31.
+
+### Design — reviewer set at `Open`, not per call
+
+**Pass.** `host.Open(root, workspaceID, reviewerAgentIDs)` fixes reviewers at assembly (`host.go` lines 93–104). `caller()` derives `IsHumanReviewer` from set membership only (`lines 107–112`). No exported method accepts an authority flag. This closes the H101-25 boolean bypass for agent ingress paths without changing the engine.
+
+`TestAssembly_AgentIngressCannotSelectHumanAuthority` proves denial is membership-based (forged summary in payload + engineer denied; same call succeeds for `reviewerID`).
+
+### H101-34 — forbidden-fixture step accepts any non-zero exit
+
+**Valid finding. Does not block item 3 discharge today.**
+
+`.github/workflows/ci.yml` lines 28–32: forbidden step passes when the checker exits non-zero. Exit **2** (allowlist config error from `check-import-allowlist.sh` lines 56–58) satisfies that condition without proving the fixture was caught as an import violation (exit **1**).
+
+**Why item 3 still discharges:** the **containment step runs first** (line 25–26) and also exits 2 on phantom allowlist entries — CI fails before the forbidden step runs. Guarantee rests on step order, not on the forbidden assertion.
+
+**Follow-up (H101-34):** require exit code **1** specifically on the forbidden fixture run, e.g. capture `$?` and fail unless exactly 1. Belt-and-suspenders; not a reject of H101-19b or this card.
+
+### Reflection name denylist on `Capabilities`
+
+`TestAssembly_CapabilitiesExposeNoPersistenceMethods` rejects methods named `Commit`/`Recover`/`Load`/`Replay` (`host_test.go` lines 297–308).
+
+**Adequate as the stated test for obligation 1**, paired with import allowlist (the durable enforcement). **Fails open** if someone adds `Persist()` or exposes store via a differently named wrapper — the name denylist alone would not catch it.
+
+Acceptable per H101-27 ("stated test + import gate"); not a substitute for future AST analysis. Unexported concrete type prevents type assertion to `*FileStore` (test lines 310–315).
+
+### Report count error
+
+Commit subject says "eight assembly tests"; **seven exist and pass**. Code is right; report is wrong. Minor documentation hygiene, not a reject.
+
+### `RecordMessagePublished`/`Processed` without caller
+
+Kevin exposes them on `Capabilities` with no caller parameter (`host.go` lines 65–66, 150–156), matching engine `CallerScope{}` treatment.
+
+**Agree: fix belongs in H101-22 (mailbox adapter)**, not here. Phase 2 mailbox must enforce causal ordering and bind publication/process recording to adapter identity. Host pass-through is correct for Phase 1.
+
+### Follow-up cards
+
+- **H101-31** (existing): discharge exit item 1.
+- **H101-34**: forbidden-fixture CI step must assert exit code 1, not any non-zero.
+- **H101-22** (existing): mailbox authority for delivery-fact recorders.
