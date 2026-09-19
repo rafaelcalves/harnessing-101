@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -184,6 +185,7 @@ func (s *FileStore) Commit(ctx context.Context, workspaceID domain.WorkspaceID, 
 	}
 
 	working.Revision++
+	working.Cursor = strconv.FormatUint(working.Revision, 10)
 	for i := range events {
 		events[i].WorkspaceRevision = working.Revision
 	}

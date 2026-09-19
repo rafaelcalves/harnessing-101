@@ -70,6 +70,7 @@ type Capabilities interface {
 	GetTask(ctx context.Context, taskID domain.TaskID) (domain.Task, error)
 	GetMessage(ctx context.Context, messageID domain.MessageID) (domain.Message, error)
 	GetAgent(ctx context.Context, agentID domain.AgentID) (domain.Agent, error)
+	GetSnapshot(ctx context.Context) (domain.Snapshot, error)
 
 	// Close releases the workspace lock. It does not delete state.
 	Close() error
@@ -177,6 +178,83 @@ func (w *workspace) GetAgent(ctx context.Context, agentID domain.AgentID) (domai
 		return domain.Agent{}, err
 	}
 	return cloneAgent(a), nil
+}
+
+func (w *workspace) GetSnapshot(ctx context.Context) (domain.Snapshot, error) {
+	return w.engine.GetSnapshot(ctx)
+}
+
+// FrontendSession is the caller-bound surface for a user interface. It has
+// no caller ID parameter, lifecycle method, mailbox integration, or storage
+// handle. The composition owner binds the caller once and retains the
+// broader Capabilities value separately for trusted lifecycle/integration use.
+type FrontendSession interface {
+	RegisterAgent(ctx context.Context, req task.RegisterAgentRequest) (domain.Receipt, error)
+	UpdateAgent(ctx context.Context, req task.UpdateAgentRequest) (domain.Receipt, error)
+	CreateTask(ctx context.Context, req task.CreateTaskRequest) (domain.Receipt, error)
+	TransitionTask(ctx context.Context, req task.TransitionTaskRequest) (domain.Receipt, error)
+	ReportTaskResult(ctx context.Context, req task.ReportTaskResultRequest) (domain.Receipt, error)
+	AcceptTaskResult(ctx context.Context, req task.AcceptTaskResultRequest) (domain.Receipt, error)
+	RejectTaskResult(ctx context.Context, req task.RejectTaskResultRequest) (domain.Receipt, error)
+	SendMessage(ctx context.Context, req task.SendMessageRequest) (domain.Receipt, error)
+	AcknowledgeMessage(ctx context.Context, req task.AcknowledgeMessageRequest) (domain.Receipt, error)
+	GetAgent(ctx context.Context, agentID domain.AgentID) (domain.Agent, error)
+	GetTask(ctx context.Context, taskID domain.TaskID) (domain.Task, error)
+	GetMessage(ctx context.Context, messageID domain.MessageID) (domain.Message, error)
+	GetSnapshot(ctx context.Context) (domain.Snapshot, error)
+}
+
+type frontendSession struct {
+	caps   Capabilities
+	caller domain.AgentID
+}
+
+// BindFrontendSession binds one host-established principal to a session.
+// The returned interface intentionally hides the broad Capabilities value;
+// switching principals requires the trusted composition owner to bind a new
+// session.
+func BindFrontendSession(caps Capabilities, caller domain.AgentID) FrontendSession {
+	return &frontendSession{caps: caps, caller: caller}
+}
+
+func (s *frontendSession) RegisterAgent(ctx context.Context, req task.RegisterAgentRequest) (domain.Receipt, error) {
+	return s.caps.RegisterAgent(ctx, s.caller, req)
+}
+func (s *frontendSession) UpdateAgent(ctx context.Context, req task.UpdateAgentRequest) (domain.Receipt, error) {
+	return s.caps.UpdateAgent(ctx, s.caller, req)
+}
+func (s *frontendSession) CreateTask(ctx context.Context, req task.CreateTaskRequest) (domain.Receipt, error) {
+	return s.caps.CreateTask(ctx, s.caller, req)
+}
+func (s *frontendSession) TransitionTask(ctx context.Context, req task.TransitionTaskRequest) (domain.Receipt, error) {
+	return s.caps.TransitionTask(ctx, s.caller, req)
+}
+func (s *frontendSession) ReportTaskResult(ctx context.Context, req task.ReportTaskResultRequest) (domain.Receipt, error) {
+	return s.caps.ReportTaskResult(ctx, s.caller, req)
+}
+func (s *frontendSession) AcceptTaskResult(ctx context.Context, req task.AcceptTaskResultRequest) (domain.Receipt, error) {
+	return s.caps.AcceptTaskResult(ctx, s.caller, req)
+}
+func (s *frontendSession) RejectTaskResult(ctx context.Context, req task.RejectTaskResultRequest) (domain.Receipt, error) {
+	return s.caps.RejectTaskResult(ctx, s.caller, req)
+}
+func (s *frontendSession) SendMessage(ctx context.Context, req task.SendMessageRequest) (domain.Receipt, error) {
+	return s.caps.SendMessage(ctx, s.caller, req)
+}
+func (s *frontendSession) AcknowledgeMessage(ctx context.Context, req task.AcknowledgeMessageRequest) (domain.Receipt, error) {
+	return s.caps.AcknowledgeMessage(ctx, s.caller, req)
+}
+func (s *frontendSession) GetAgent(ctx context.Context, id domain.AgentID) (domain.Agent, error) {
+	return s.caps.GetAgent(ctx, id)
+}
+func (s *frontendSession) GetTask(ctx context.Context, id domain.TaskID) (domain.Task, error) {
+	return s.caps.GetTask(ctx, id)
+}
+func (s *frontendSession) GetMessage(ctx context.Context, id domain.MessageID) (domain.Message, error) {
+	return s.caps.GetMessage(ctx, id)
+}
+func (s *frontendSession) GetSnapshot(ctx context.Context) (domain.Snapshot, error) {
+	return s.caps.GetSnapshot(ctx)
 }
 
 func (w *workspace) Close() error {

@@ -9,6 +9,7 @@ package task
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 	"unicode/utf8"
 
@@ -302,6 +303,72 @@ func (e *Engine) GetTask(ctx context.Context, taskID domain.TaskID) (domain.Task
 		return domain.Task{}, &domain.Error{Code: domain.ErrNotFound, Detail: "task not found"}
 	}
 	return task, nil
+}
+
+// GetSnapshot returns one detached, workspace-wide view. The store's Load is
+// the consistency boundary; cloning here protects nested slices and pointers.
+func (e *Engine) GetSnapshot(ctx context.Context) (domain.Snapshot, error) {
+	snap, err := e.store.Load(ctx, e.workspaceID)
+	if err != nil {
+		return domain.Snapshot{}, err
+	}
+	if snap.WorkspaceID == "" {
+		snap.WorkspaceID = e.workspaceID
+	}
+	if snap.Cursor == "" {
+		snap.Cursor = strconv.FormatUint(snap.Revision, 10)
+	}
+	return cloneSnapshot(snap), nil
+}
+
+func cloneSnapshot(snap domain.Snapshot) domain.Snapshot {
+	out := snap
+	out.Agents = append([]domain.Agent{}, snap.Agents...)
+	for i := range out.Agents {
+		if snap.Agents[i].LastUpdatedProvenance != nil {
+			p := *snap.Agents[i].LastUpdatedProvenance
+			out.Agents[i].LastUpdatedProvenance = &p
+		}
+	}
+	out.Tasks = append([]domain.Task{}, snap.Tasks...)
+	for i := range out.Tasks {
+		if snap.Tasks[i].CurrentResultID != nil {
+			id := *snap.Tasks[i].CurrentResultID
+			out.Tasks[i].CurrentResultID = &id
+		}
+	}
+	out.TaskResults = append([]domain.TaskResult{}, snap.TaskResults...)
+	for i := range out.TaskResults {
+		out.TaskResults[i].Artifacts = append([]string{}, snap.TaskResults[i].Artifacts...)
+	}
+	out.Messages = append([]domain.Message{}, snap.Messages...)
+	for i := range out.Messages {
+		if snap.Messages[i].TaskID != nil {
+			id := *snap.Messages[i].TaskID
+			out.Messages[i].TaskID = &id
+		}
+		if snap.Messages[i].ReplyToMessageID != nil {
+			id := *snap.Messages[i].ReplyToMessageID
+			out.Messages[i].ReplyToMessageID = &id
+		}
+		if snap.Messages[i].QueuedAt != nil {
+			v := *snap.Messages[i].QueuedAt
+			out.Messages[i].QueuedAt = &v
+		}
+		if snap.Messages[i].PublishedAt != nil {
+			v := *snap.Messages[i].PublishedAt
+			out.Messages[i].PublishedAt = &v
+		}
+		if snap.Messages[i].ProcessedAt != nil {
+			v := *snap.Messages[i].ProcessedAt
+			out.Messages[i].ProcessedAt = &v
+		}
+		if snap.Messages[i].AcknowledgedAt != nil {
+			v := *snap.Messages[i].AcknowledgedAt
+			out.Messages[i].AcknowledgedAt = &v
+		}
+	}
+	return out
 }
 
 // RegisterAgentRequest is version 1's RegisterAgent payload (boundaries.md
