@@ -42,7 +42,7 @@ Derived from `docs/PROJECT-PLAN.md` phase descriptions. Where the plan's one-lin
 | **0** | `CONTRIBUTING.md`, licence, conduct, templates, CI, commit-identity guard, accepted stack ADR, threat-model baseline; plan updated to match ADR | "Stranger could contribute" is subjective; Kevin/Ryan artefacts in flight |
 | **1** | See **Phase 1 exit (revised 2026-09-19)** below — Stanley H101-25 adds composition boundary, CI allowlist, and assembly authorization tests before phase acceptance | Was: port APIs + unit tests only; H101-19 containment moved in from Phase 2 |
 | **2** | See **Phase 2 exit (revised 2026-09-19)** below — CLI §2 walkthrough, restart-after-crash, shared adapter contract ([ADR 0003](../adr/0003-ui-adapter-contract.md) UI-01–08 / H101-40), mailbox (H101-22), disclosure (H101-16), stale-lock (H101-20), Phase 3 `Unsupported`, inherited containment | Was: one sentence; obligations H101-16/20/22 were undated in the table |
-| **3** | Start/stop/budget/crash-recovery on supported platforms; process-tree termination; misbehaviour → `RecoveryRequired` | Platform matrix **UNKNOWN** (`boundaries.md` line 65) |
+| **3** | Start/stop/budget/crash-recovery on supported platforms; process-tree termination; misbehaviour → `RecoveryRequired` | Supported: `darwin/arm64`, `linux/amd64` per ADR 0001 H101-50 (`bcba765`); native evidence per target |
 | **4** | Clean-machine install, observed egress audit, new-joiner docs, version tag | Needs written observation protocol |
 
 **Weakest phase exit:** Phase 0 — "a repository a stranger could contribute to" has no objective threshold, and the plan still recommends TypeScript while ADR 0001 accepts Go (see audit).
@@ -66,9 +66,9 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 
 | # | Criterion | Checkable today? |
 | --- | --- | --- |
-| 1 | CLI product cycle (§2 walkthrough) | **No** — needs `cmd/harnessing` and a CI subprocess test |
-| 2 | Restart after crash | **Partially** — H101-20 flock recovery on unix (`d2f4266`); harnessing crash test after item 1 still needed; Windows `Unsupported` |
-| 3 | Swappability (ADR 0003 UI-01–08) | **No** — needs `internal/adaptercontract` suite, FrontendSession, throwaway adapter |
+| 1 | CLI product cycle (§2 walkthrough) | **No** — write commands exist (`3659e6a`); `run()` cycle test is scaffold only — subprocess §2 walkthrough still required |
+| 2 | Restart after crash | **Partially** — linux crash-reopen with state (`f242b2b`); handoff proof via host only (H101-58); darwin manifest still needed |
+| 3 | Swappability (ADR 0003 UI-01–08) | **No** — `GetSnapshot`/`FrontendSession` (`d906a9c`); UI-06 subscription gap; no `adaptercontract` suite or second adapter |
 | 4 | Containment preserved | **Partially** — store half satisfied (`24a2022`); UI import allowlist (no host from presentation) not yet enforced |
 | 5 | Mailbox adapter (H101-22) | **No** — needs file mailbox wired to delivery-fact recorders |
 | 6 | First-run disclosure (H101-16) | **Satisfied** — every invocation, stderr, ADR 0002 sentence, CI tests (`1eda92b`) |
@@ -78,7 +78,7 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 
 1. **CLI product cycle (§2 walkthrough)** — A CI-runnable script or `go test` drives the **minimum useful product** in [`docs/product/definition.md`](../product/definition.md) §2 exclusively through the shipped `harnessing` command (subprocess, not in-process `host` import from the test package): create/open workspace; register ≥2 named agents; create a task with one accountable owner; task-linked handoff with explicit acknowledgement; report a blocker and resolve it; report a result; human reject then accept a replacement result; status queries show assigned / in-progress / blocked / awaiting-review with reporter identity; close the CLI; reopen; assert durable records without resending work. **This item is what “usable for real work” means** — not a subjective judgment.
 
-2. **Restart after crash** — After the cycle in item 1, simulate an unclean host exit (`kill -9` or equivalent) without `Close`; a subsequent `harnessing` invocation must reopen the same workspace and recover the persisted cycle state. **H101-20** (flock on unix; manual fallback documented in `h101-20-lock-recovery.md`) satisfies the lock-recovery prerequisite on **linux and darwin** — platforms CI and local dev exercise. **Windows** remains `Unsupported` until lock support is implemented and crash-release verified; item 2 does not discharge on Windows while ADR 0001's platform matrix is unsettled. Graceful reopen alone does **not** discharge this item (ADR 0003 UI-07). Inherited from Phase 1 limits; not deferrable to Phase 3.
+2. **Restart after crash** — After the cycle in item 1, simulate an unclean host exit (`kill -9` or equivalent) without `Close`; a subsequent `harnessing` invocation must reopen the same workspace and recover the persisted cycle state. **Supported targets** (ADR 0001 H101-50, `bcba765`): `linux/amd64` and `darwin/arm64` on native local storage only. Each in-scope target owes **native** adapter-cycle and crash-reopen evidence recorded in the milestone manifest (exact OS/build, commands, outputs) — **Ubuntu-only CI does not discharge macOS.** **H101-20** satisfies the lock-recovery prerequisite per target when that target's native crash-reopen proof passes (see H101-55). **Windows exclusion smoke:** workspace commands return `Unsupported`; `version`/`help` still run — asserts defined exclusion, not support. Graceful reopen alone does **not** discharge this item (ADR 0003 UI-07). Inherited from Phase 1 limits; not deferrable to Phase 3.
 
 3. **Swappability (shared adapter contract)** — [ADR 0003](../adr/0003-ui-adapter-contract.md) (H101-40) defines behavioral scenarios **UI-01 through UI-08**; this item requires both adapters to pass them in CI per the **H101-53 assertion table** below, not reproduce the architecture here. The shared black-box suite lives in `internal/adaptercontract/contract_test.go`; each adapter enters through its **real** input driver (CLI argv/stdin/structured output; throwaway independent handler — no CLI imports, no shared dispatch). Observations come through the caller-bound **FrontendSession** surface (not raw `Capabilities` injection). Suite includes per-adapter isolated workspaces, cross-adapter continuation (A writes, B reads/acks/reviews), and concurrent observer visibility. Compare each adapter against **independently specified expected states**, not adapter-to-adapter equality alone (ADR 0003). **Item 3 does not discharge item 2** — UI-07 covers graceful reopen only; crash restart stays item 2. **Fake run-output stream tests do not count** toward replaceability; actual supervision/output stays Phase 3. Core must import neither adapter.
 
@@ -997,3 +997,166 @@ Both adapters run the **same** `internal/adaptercontract` scenarios through **re
 ### (c) God question 4 — UI-07 vs item 2
 
 **Confirmed: item 3 does not discharge item 2.** ADR UI-07 line 47 explicitly separates crash restart ("separate inherited recovery obligation") from graceful reopen. The adaptercontract suite may prove UI-07 graceful paths only. **Item 2** remains the dedicated `harnessing` subprocess `SIGKILL` test after item 1's full cycle (partially satisfied via H101-20 lock mechanism only).
+
+---
+
+## H101-55 — platform ruling vs item 2 (2026-09-19)
+
+Reviewed ADR 0001 H101-50 amendment (`bcba765`). **Amends H101-47 platform language** — local dev on a laptop is not milestone discharge without a recorded evidence manifest.
+
+### Does the lock half of item 2 still discharge on darwin?
+
+**No — not for milestone/exit purposes as H101-47 recorded it.** Revised per target:
+
+| Target | Lock half (H101-20) evidence today | Discharges lock prerequisite? |
+| --- | --- | --- |
+| **linux/amd64** | `TestOpen_RecoversAfterOwnerCrash` runs in CI on `ubuntu-latest` (`d2f4266`) | **Yes** — native CI evidence (record exact runner image in manifest per ADR) |
+| **darwin/arm64** | `h101-20-lock-recovery.md` OBSERVED STATE (manual darwin/arm64, 2026-09-19); tests pass when run locally | **Not yet** — engineering confidence only until **macOS CI runner** **or** milestone manifest records commit, exact macOS build, commands, and outputs |
+| **Windows** | `Unsupported` on workspace open (`lock_windows.go`) | **N/A** — excluded; not a partial discharge |
+
+**Answer to god:** either **card a macOS runner**, or **require a written milestone evidence manifest** for darwin-native runs. I will not treat undisclosed laptop runs as discharge.
+
+**Full item 2** (item 1 cycle → `SIGKILL` → `harnessing` reopen) remains **unsatisfied on both targets** — unchanged.
+
+### God question 1 — items 8 and 3 vs per-milestone environment recording
+
+| Item | Ubuntu-only CI adequate? | Why |
+| --- | --- | --- |
+| **8** (zero network, `go list -deps`) | **Yes** | OS-agnostic import graph; same result on any `GOOS` that compiles |
+| **3** (adaptercontract UI-01–08) | **No** | ADR 0001: both in-scope targets owe **native** adapter-cycle evidence; suite must run on `linux/amd64` CI **and** `darwin/arm64` (runner or recorded manifest) |
+| **2** (crash reopen) | **No** | Same native requirement; lock-only proof on one OS does not discharge the other |
+
+**Per-milestone recording** applies to **platform-behaviour claims** (lock, crash, adapter cycle), not to static dependency checks.
+
+### God question 2 — Windows exclusion assertion
+
+**Worth one Phase 2 exit check — not item 2 discharge.** Windows is excluded from coordination; regressions to silent partial support are a real risk.
+
+**Add (lightweight):** on `GOOS=windows` build/test or a Windows CI job: `harnessing version` and `help` succeed; any workspace-open path returns **`Unsupported`** with stable code — not panic, not success, not unprotected writes. This asserts **defined exclusion**, not support. Does not block phase exit on Windows features.
+
+### God question 3 — zero dependencies vs H101-27 obligation 2 AST checker
+
+**Revisit warranted; Phase 1 item 3 discharge unchanged.**
+
+ADR 0001 now records zero external dependencies as **preference, not constraint**. The stronger obligation-2 check (resolved symbols / `CommitRequest` construction) is therefore **not technically forbidden** — it is **unpaid for**.
+
+| Path | Status |
+| --- | --- |
+| Import allowlist + forbidden fixture (current) | Still discharges Phase 1 item 3 — **done** |
+| Stdlib-only `go/ast` checker (~100–200 lines) | **Feasible without new modules** — always was; preference change does not affect this path |
+| `golang.org/x/tools/go/analysis` | **Now arguable** with explicit ADR on pin, licence, maintenance — no longer vetoed by zero-dep alone |
+
+**Recommendation:** keep weaker gate for Phase 2 unless owner funds stronger checker. Preference change opens the door; it does not require upgrading containment before phase exit.
+
+### CI / wording changes required
+
+1. **macOS runner** (or formal milestone manifest process for darwin-native evidence) — **card it** for items 2 and 3.
+2. **Pin and record** `ubuntu-latest` image ID in milestone manifest (ADR requirement).
+3. **Windows exclusion smoke test** — add to Phase 2 exit checklist (new sub-bullet under item 2 or item 7).
+4. **H101-47** platform paragraphs superseded by this section for discharge claims.
+
+---
+
+## H101-57 acceptance review (2026-09-19)
+
+Three slices on `a9d3d07`: `d906a9c` (session surface), `3659e6a` (write commands + hold), `a9d3d07` (IOFailure uncertainty rendering). Re-ran named tests — pass. Did not credit uncommitted `phase2_crash_reopen_test.go` (H101-49 in flight).
+
+### Verdicts
+
+| Slice | Verdict |
+| --- | --- |
+| `d906a9c` Claudio — FrontendSession + GetSnapshot | **ACCEPTED WITH FOLLOW-UP** |
+| `3659e6a` Kevin — write commands + hold | **ACCEPTED WITH FOLLOW-UP** |
+| `a9d3d07` Kevin — UI-02 IOFailure rendering | **ACCEPTED WITH FOLLOW-UP** |
+
+### Phase 2 exit item deltas
+
+| # | Moves? | After these three commits |
+| --- | --- | --- |
+| 1 | **No** | Write path exists; **not discharged** — see Q1 |
+| 2 | **Slight** | `hold` subprocess kill/recovery (`hold_test.go`) advances CLI-level crash fixture; full item-2 proof still needs post-§2-cycle subprocess kill (H101-49) + darwin manifest |
+| 3 | **Slight** | Session surface lands; **not discharged** — no `adaptercontract` suite, no second adapter, UI-06 incomplete |
+| 4 | **No** | CLI still imports `host` directly; UI allowlist gate still open |
+| 5–7 | **No** | Unchanged |
+| 6, 8 | **No** | Already satisfied |
+| 9 | **N/A** | `run()` tests are valid scaffolding; do not substitute for item 1 subprocess proof |
+
+### God question 1 — does `TestRun_FullCycleThroughWriteCommands` discharge item 1?
+
+**No.** Item 1 names a **subprocess** of the shipped `harnessing` binary, explicitly **not** in-process `run()` from the test package.
+
+`TestRun_FullCycleThroughWriteCommands` is valuable — it proves the dispatch path works — but it is **scaffold**, not discharge. Same for error-rendering tests (`Denied:`, `Conflict:`).
+
+**Also missing from any committed test vs item 1 / §2:** ≥2 registered agents; blocker report and resolve; human **reject then accept replacement**; close and **reopen** without resending; status view with reporter identity for all states. `TestRun_SendAndAckCycle` covers messaging separately but is not in the full-cycle test.
+
+**What item 1 needs next:** one `exec.Command` subprocess test (or script in CI) driving the full §2 walkthrough through argv only.
+
+### God question 2 — Claudio's cursor divergence vs UI-06
+
+**UI-06 is not satisfiable yet.** Revision token without subscription/replay cannot observe from cursor, deduplicate replays, or reload on `CursorExpired`.
+
+**This is a missing card, not a scope dodge.** Claudio correctly declared the divergence. `GetSnapshot` + empty collections + detachment satisfy the **enumeration/discovery** half of UI-06; **event observation** is a separate delivery (subscription/replay plumbing per ADR 0003 §stream semantics). Card it before item 3 can discharge UI-06.
+
+### God question 3 — IOFailure test via corrupt state vs fsync
+
+**Honest for the rendering contract; not proof of the fsync path.**
+
+All `IOFailure` responses share one render path (`flags.go`); the test correctly exercises that path at the **Code** level. Corrupt-state IOFailure is not the same failure mode as post-rename fsync uncertainty — but the **UI obligation** is "never render IOFailure as plain failure / nothing happened," which the test does prove.
+
+**Follow-up:** when H101-56 (replay/durability) lands, add fsync-fault injection or accept ADR 0004 `OutcomeUncertain` and test that code instead. ADR 0004 (`H101-54`) proposes replacing detail-substring branching — align rendering test when taxonomy changes.
+
+### God question 4 — `-sender` vs `-caller`
+
+**Criteria should assert unverified sender, not block the divergence.**
+
+Kevin's separate `-sender` flag is **correct surface honesty** (H101-23). Add to item 1 walkthrough / UI-05 assertions when send is in the subprocess test: output must show sender as **claimed routing data**, never as verified identity; provenance fields visible; no validation badge. No change needed to accept `3659e6a`.
+
+### God question 5 — no automatic retry
+
+**Absence is sufficient for this slice.** No write command retries on failure — true by construction today. **Assert in item 3 contract suite** when built: failed mutation leaves stderr without a new auto-generated `-request-id` and without success line. Light assertion, not a blocker for these cards.
+
+### Declared divergences
+
+| Divergence | Ruling |
+| --- | --- |
+| Cursor = revision token only (no subscription) | **Accepted** — missing card for replay half of UI-06 |
+| Session reuses `core/task` request records vs neutral `internal/api` | **Accepted with follow-up** — matches ADR direction; neutral package still open for item 4 UI allowlist |
+| `-sender` separate from `-caller` | **Accepted** — product/security surface, not a defect |
+
+### H101-57 amendment — `f242b2b` crash-reopen test (inform, 2026-09-19)
+
+Reviewed `f242b2b` (`TestRun_Phase2CycleRecoversAfterKilledCLI`). Re-ran — pass on darwin (local); runs on linux CI when not `Unsupported`.
+
+**Verdict: ACCEPTED WITH FOLLOW-UP** — advances item 2 on linux; does not discharge item 1.
+
+#### `run()` vs spawned binary — one ruling for both items
+
+Item 1's anchor says *subprocess, not in-process `host` import from the test package.* That forbids the **test package driving mutations through `host.Open`**, not every use of `run()`.
+
+| Mechanism | What it proves | Enough for milestone discharge? |
+| --- | --- | --- |
+| `run()` in `package main` tests | Same dispatch as `main` for single-shot commands | **Scaffold only** for item 1; **acceptable** for per-invocation steps in item 2 |
+| `exec.Command` subprocess (`hold` helper) | Real process, real `SIGKILL`, real lock lifetime | **Required** for the crash half of item 2 |
+| `host.Open` / `GetSnapshot` from test package | Composition queries outside CLI | **Not** product walkthrough evidence — see H101-58 |
+
+**Unified answer:** `run()` does **not** discharge item 1. It does **not** fully discharge item 2 either, but item 2's crash path is satisfied on **linux/amd64** when a **real subprocess** is killed and a subsequent command reopens with durable task/result state. Claudio's asymmetry (subprocess `hold`, `run()` for driving) is **enough for item 2's crash proof**; it is **not** enough to move item 1 on the same reasoning.
+
+**Item 1 still needs:** a spawned-binary (or CI script invoking built `harnessing`) end-to-end §2 walkthrough — not `run()` alone.
+
+#### Item 2 delta after `f242b2b`
+
+| Part | linux/amd64 | darwin/arm64 |
+| --- | --- | --- |
+| Lock prerequisite (H101-20) | **Satisfied** (CI) | **Not discharged** (manifest or macOS runner) |
+| Crash-reopen with product state | **Satisfied** — `hold` subprocess `SIGKILL`, `task` shows `AwaitingReview` + `res1` | Same test must run natively with recorded manifest |
+| Acknowledged handoff survived | **Only via `host.GetSnapshot` in test** — not through CLI | Same gap |
+
+**Item 2 overall: still PARTIALLY SATISFIED.** Task/result crash recovery on linux is proven; handoff durability is proven outside the product surface; darwin pending.
+
+#### H101-58 — message query gap (god carded, not dispatched)
+
+**Item 1 cannot honestly discharge while a walkthrough step is only verifiable from outside the product.** `send` and `ack` exist; no `message` (or snapshot) query on the CLI. The crash test acknowledges a handoff then proves it via `host.GetSnapshot` — valid engineering proof, **invalid product walkthrough proof**.
+
+This is the third exit-proof gap (after reassignment, after long-running invocation). **H101-58 must land before item 1 discharges** if the §2 walkthrough includes handoff visibility. Item 2's handoff-survival claim should likewise move to CLI-visible evidence when H101-58 lands.
+
+**No change to H101-57's other four answers** (UI-06 cursor, IOFailure render, `-sender`, no auto-retry).
