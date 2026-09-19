@@ -9,12 +9,23 @@ const usage = `harnessing: a local-first, headless-core workspace tool
 
 Usage:
   harnessing version
-  harnessing task -workspace <dir> [-workspace-id <id>] [-reviewer <agentID>]... <taskID>
+  harnessing task       -workspace <dir> [-workspace-id <id>] <taskID>
+  harnessing hold        -workspace <dir> [-workspace-id <id>] [-reviewer <id>]...
+  harnessing register    -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -agent <id> -display-name <name> [-profile-id <id>]
+  harnessing update      -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -agent <id> [-display-name <name>] [-profile-id <id>]
+  harnessing create      -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -task <id> -title <title> [-assignee <id>]
+  harnessing transition  -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -task <id> -from <status> -to <status> [-reason <text>]
+  harnessing report      -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -task <id> -result <id> -expected-revision <n> -summary <text> -artifact <ref>...
+  harnessing accept       -workspace <dir> -reviewer <id>... -caller <id> -request-id <id> -task <id> -result <id> -expected-revision <n>
+  harnessing reject       -workspace <dir> -reviewer <id>... -caller <id> -request-id <id> -task <id> -result <id> -expected-revision <n> -reason <text>
+  harnessing send         -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -message <id> -recipient <id> -kind <Request|Inform|Result> -body <text> [-sender <id>] [-task <id>] [-reply-to <id>]
+  harnessing ack          -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -message <id>
 
 Every command other than version opens a workspace through
 internal/host.Capabilities; there is no other path to the store. The
 reviewer set is supplied here, by you, on the command line — never read
-from anything already in the workspace.
+from anything already in the workspace. -caller is who is invoking the
+command; the engine, not this tool, decides what that caller may do.
 `
 
 // disclosure is intentionally printed on every invocation. A workspace file
@@ -40,6 +51,26 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	case "task":
 		return runTask(args[1:], stdout, stderr)
+	case "hold":
+		return runHold(args[1:], stdout, stderr)
+	case "register":
+		return runRegister(args[1:], stdout, stderr)
+	case "update":
+		return runUpdate(args[1:], stdout, stderr)
+	case "create":
+		return runCreate(args[1:], stdout, stderr)
+	case "transition":
+		return runTransition(args[1:], stdout, stderr)
+	case "report":
+		return runReport(args[1:], stdout, stderr)
+	case "accept":
+		return runAccept(args[1:], stdout, stderr)
+	case "reject":
+		return runReject(args[1:], stdout, stderr)
+	case "send":
+		return runSend(args[1:], stdout, stderr)
+	case "ack":
+		return runAck(args[1:], stdout, stderr)
 	case "help", "-h", "--help":
 		_, _ = fmt.Fprint(stdout, usage)
 		return 0
