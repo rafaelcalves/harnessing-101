@@ -26,8 +26,12 @@ jobs:
         run: ./scripts/check-import-allowlist.sh
       - name: Check forbidden import fixture
         run: |
-          if ./scripts/check-import-allowlist.sh ./testdata/forbidden; then
-            echo "forbidden fixture unexpectedly passed import containment" >&2
+          set +e
+          ./scripts/check-import-allowlist.sh ./testdata/forbidden
+          status=$?
+          set -e
+          if [ "$status" -ne 1 ]; then
+            echo "forbidden fixture must fail with exit 1, got $status" >&2
             exit 1
           fi
       - name: Lint
