@@ -71,7 +71,7 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 | 3 | Swappability (ADR 0003 UI-01–08) | **No** — needs `internal/adaptercontract` suite, FrontendSession, throwaway adapter |
 | 4 | Containment preserved | **Partially** — store half satisfied (`24a2022`); UI import allowlist (no host from presentation) not yet enforced |
 | 5 | Mailbox adapter (H101-22) | **No** — needs file mailbox wired to delivery-fact recorders |
-| 6 | First-run disclosure (H101-16) | **Partially** — README disclosure present; in-product first-run line needs CLI test |
+| 6 | First-run disclosure (H101-16) | **Satisfied** — every invocation, stderr, ADR 0002 sentence, CI tests (`1eda92b`) |
 | 7 | Phase 3 ops `Unsupported` | **No** — needs Capabilities/CLI surface and explicit `Unsupported` assertions |
 | 8 | Zero network (CLI tree) | **Satisfied** — `go list -deps ./cmd/harnessing` finds no `net`/`net/http` (`24a2022`) |
 | 9 | Test layering | **N/A** — policy; enforced by review |
@@ -86,7 +86,7 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 
 5. **Mailbox adapter (H101-22)** — File-protocol mailbox is the sole writer of `RecordMessagePublished` and `RecordMessageProcessed`; publish precedes process; skipping publish or reversing order is rejected with persisted state unchanged. `MessageAcknowledgement` control records and `AcknowledgeMessage` share the same recipient and idempotency rules. Integration test covers at least one full send → publish → process → ack path through the adapter.
 
-6. **First-run disclosure (H101-16)** — Automated test: on first `harnessing` use in a fresh workspace, the unconditional ADR 0002 disclosure line (“does not start, observe, or restrict any agent process…”) is emitted before interactive coordination commands are accepted. No validation-looking cues on manually sourced content. README clone-and-run disclosure remains (regression check against existing text).
+6. **First-run disclosure (H101-16)** — Automated test: every `harnessing` invocation emits the unconditional ADR 0002 disclosure line (“does not start, observe, or restrict any agent process…”) before command handling (stderr, so stdout stays scriptable for item 1). **“Unconditional”** means visible on every run, not a persisted once-per-workspace marker. No validation-looking cues on manually sourced content. README clone-and-run disclosure remains (regression check against existing text).
 
 7. **Phase 3 operations rejected** — `StartRun`, `StopRun`, and `SetRunBudget` (or their CLI equivalents) return **`Unsupported`** with a stable, documented error — not absent handlers that panic, not silent success. If Phase 2 ships without registering those subcommands, CI asserts they are unreachable as success paths. Process control remains Phase 3 scope.
 
@@ -848,3 +848,45 @@ Reviewed commit `24a2022` (CLI skeleton — read-only `harnessing task`). Re-ran
 - Enumeration / snapshot query for item 3 (Stanley H101-40 amendment).
 - UI import allowlist when `FrontendSession` splits presentation from `host`.
 - Item 1 walkthrough subprocess test with stable error assertions on denial paths.
+
+---
+
+## H101-45 / H101-16 acceptance review (2026-09-19)
+
+Reviewed commit `1eda92b` (unconditional CLI disclosure). Re-ran `go test -count=1 ./cmd/harnessing/ -run Disclosure` — pass.
+
+**Verdict: ACCEPTED**
+
+**Phase 2 exit item 6: SATISFIED**
+
+### Item 6 checklist
+
+| Requirement | Result |
+| --- | --- |
+| Automated test | **Pass** — `TestRun_DisclosureIsUnconditionalAndKeepsStdoutScriptable`, `TestRun_DisclosurePrecedesFreshWorkspaceCommand` |
+| ADR 0002 sentence present | **Pass** — exact wording in `disclosure` constant line 3 (`run.go`) |
+| Before coordination commands | **Pass** — printed at top of `run()` before switch; stronger than item 6 minimum |
+| No validation-looking cues | **Pass** — plain text only |
+| README regression | **Pass** — README local-only paragraph unchanged |
+
+### God question — does “unconditional” mean every invocation?
+
+**Yes.** ADR 0002 requires the line “unconditionally visible during Phase 2 use, not just at onboarding.” A persisted once-per-workspace marker would **not** satisfy that. Kevin’s every-invocation reading is the correct and **stronger** interpretation. Item 6 wording updated above to say so explicitly (was ambiguous “first use in a fresh workspace”).
+
+### God question — stderr before command handling?
+
+**Correct placement.** Item 1’s subprocess walkthrough must parse stdout for task/status output; disclosure on stderr keeps pipelines scriptable. Tests assert stdout is clean (`harnessing dev\n` only). Item 1’s future walkthrough test should parse stdout and may ignore stderr or assert disclosure as a separate prefix check — either works.
+
+### God finding 1 — opens with “runs completely locally”
+
+**Not a criteria failure; route to Angela for voice.** Item 6 does not govern lead-sentence ordering. Read in full, the opening clause is immediately qualified (egress, non-confinement, no data-stay guarantee) — same sentence as README/`definition.md`. Creed’s H101-30 excerpt hazard applies to **any** use of that phrase: a partial quote of the first clause alone would mislead. That is a standing constraint on quoting, not proof the in-product text is dishonest.
+
+**Judgement call:** whether reassurance-then-qualify reads better than threat-first for clone-and-run users is **product/customer experience**, not acceptance criteria. I do not block item 6 on it. If Angela wants threat-first ordering, that is a copy edit, not a phase-exit miss.
+
+### God finding 2 — lines 2 and 3 overlap
+
+**Agree, minor.** Line 2 paraphrases; line 3 is ADR 0002 verbatim. Redundant for a careful reader; defensible while ADR exactness is required. **Follow-up copy tighten** for Angela or Claudio — not a blocker.
+
+### Design call verified
+
+Every invocation + stderr-first: **correct** for public clone-and-run and scriptable stdout. No persisted marker.
