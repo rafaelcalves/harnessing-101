@@ -236,3 +236,63 @@ going public early — the underlying exfiltration risk and its scope are unchan
 can read about it; only how many people the in-product disclosure now needs to reach has
 changed. I deliberately left the phase-order question, ADR 0002's acceptance, and the rest
 of section 5 untouched — going public does not reopen either.
+
+## 7. Review of H101-25's "trust becomes inspectable" claim
+
+**Context.** [`h101-25-state-store-authority.md`](../architecture/h101-25-state-store-authority.md)
+(committed `f68367f`) rules that the `StateStore.Commit` port stays as-is; the containment
+Kelly's bypass findings called for moves into Phase 1 as three checkable obligations
+(a composition boundary that returns only capabilities, a CI dependency/symbol allowlist
+with a forbidden-fixture check, and negative authorization tests). Its stated security
+position is that this makes "trust inspectable rather than absolute." I reviewed that
+claim only — not whether the three obligations are correctly specified as acceptance
+criteria, which is Kelly's ground (H101-27).
+
+**1. Is "inspectable trust" honest, or does it read stronger than it is?**
+**INFERENCE, same standard as section 6: this is OBSERVED STATE at commit `f68367f`, not a
+standing guarantee, and I checked the cited code rather than took the ruling's word for
+it** — `outbound.go`'s `StateStore.Commit` and `CallerScope.IsHumanReviewer` at
+`engine.go` match the ruling's description. With that checked: **the phrase is honest,
+and I would sign it as written, on the condition that its own disclaimer sentence ships
+attached to it, every time it's quoted.** "Inspectable" is doing real, narrow work — it
+means a reviewer can point at a named, bounded set of code and a CI check that fires on a
+forbidden fixture, which is a stronger and more falsifiable claim than "we trust the
+host." It does not mean, and the ruling does not claim, that the named set is safe,
+verified, or resistant to a malicious member of itself — the ruling says so explicitly
+("no claim of resistance to malicious same-process code, hostile file writers, or forged
+same-user identity"). The risk isn't in the ruling's own wording; it's in quoting
+"inspectable" without that sentence later, where it could be read as "contained." Keep
+them welded together in any summary that reaches the owner.
+
+**2. Does the named trusted set (core, composition/identity-policy code, persistence
+adapter) actually cover the paths that can lie?** **INFERENCE — yes, for the threats in
+my model; no, for a threat my model already puts out of scope, and that's consistent, not
+a gap.** `IsHumanReviewer` is a host-supplied boolean read by composition/identity-policy
+code, in the same process as everything else that code touches — that is a real boundary
+against the threat this product must defend against (an agent, or content an agent
+produced, trying to claim reviewer authority it wasn't given): the negative test he
+specifies — agent ingress cannot select human-review authority — is a genuine proof for
+that threat, because no agent-controlled payload has a path to set the boolean; only
+reviewed host code assembled inside the named composition boundary does. It is *not* a
+boundary against a threat my section 1 already excludes: malicious code that is itself
+part of the trusted set (a compromised composition package, a tampered persistence
+adapter, a supply-chain-compromised dependency inside that boundary). For that threat,
+naming the set and fencing its imports in CI is closer to documentation with a tripwire
+than containment — which is exactly what the ruling itself says with the "same-process
+code" and "same-user identity" exclusions. So: real boundary for the in-scope agent
+threat; a naming, not an enforcement, for the explicitly out-of-scope insider/supply-chain
+one. Both readings are already in the ruling's own text; I am not correcting it, I am
+confirming the two halves are consistent with my threat model's scope line.
+
+**3. Does ADR 0002 actually not waive command-validation or record-integrity
+obligations, as the ruling reads it?** **Confirmed, re-read directly rather than taking
+the relay's word for it.** ADR 0002's decision section states outright: "Acceptance of
+this exposure does not waive the controller's filesystem, command-validation, or
+record-integrity obligations." Stanley's citation is accurate and his conclusion holds:
+ADR 0002 accepts that manually started agents are unobserved and unrestricted in Phases
+1-2; it says nothing about, and does not license, a host-side bypass of the core's
+acceptance/acknowledgement rules through a raw `Commit` call or a hand-set
+`IsHumanReviewer`. Moving that containment into Phase 1 does not rest on a misreading of
+ADR 0002 — the two decisions address different trust boundaries (manually started agent
+processes vs. privileged host/composition code) and neither one's acceptance bleeds into
+the other's obligations.
