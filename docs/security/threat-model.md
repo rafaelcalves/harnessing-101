@@ -1,0 +1,123 @@
+# Threat model — the local-only guarantee
+
+Status: **Phase 0, no code exists.** Evidence convention per the project plan: CODE-PATH
+FACT, OBSERVED STATE (dated), SECONDARY SOURCE, INFERENCE, UNKNOWN. Almost everything
+below is INFERENCE reasoning about a design in [boundaries.md](../architecture/boundaries.md)
+and [ADR 0001](../adr/0001-language-and-runtime.md); it is labeled as such rather than
+dressed as fact.
+
+## 1. Assets, trust boundaries, in/out of scope
+
+**INFERENCE — assets.** The workspace on disk (task ledger, agent registry, message
+envelopes, run output journals) is the primary asset: the durable, human-inspectable
+record of who did what. Second, provider credentials and any secret an agent process
+needs — these belong to the user, not the core, but `ProcessSupervisor` is the mechanism
+by which they reach a child's environment. Third, the workspace lock (one exclusive
+writer) — losing it to a second process is a correctness and confidentiality problem, not
+just a bug. Fourth, the user's filesystem outside the workspace root, which the product
+must never touch as a side effect.
+
+**INFERENCE — trust boundaries.** (a) Between the controller/core and each supervised
+agent process — the agent is untrusted output-producer and untrusted input-consumer at
+once. (b) Between the core and the workspace directory on disk — file content, including
+message envelopes, is attacker-controllable if anything else on the machine can write
+there. (c) Between the core and any other local process/user on the same machine that can
+read or write the workspace path. (d) Between the core and whatever an agent process
+itself decides to dial out to, which the product does not and should not control beyond
+visibility.
+
+**Must defend against (INFERENCE, this is the product's job):**
+- A malicious or compromised agent process making the *core* originate network traffic,
+  escape the workspace root, or corrupt another agent's task/message state.
+- A hostile or tampered workspace directory: symlinks pointing outside the workspace,
+  crafted message envelopes, path traversal in any user- or agent-supplied ID or path field.
+- File/message content treated as instruction rather than data inside the core (injection
+  into *core logic* — a task title or message body that changes what command executes,
+  not just what is displayed).
+
+**Explicitly out of scope (INFERENCE — an honest boundary, not a promise we can't keep):**
+- Confining what a *user-configured* agent profile does once started. If the user points
+  an agent at a model provider or gives it shell access, that egress is the user's;
+  sandboxing arbitrary agent binaries (seccomp, containers, network namespaces) is a
+  separate, unbuilt security design, not something ADR 0001 or boundaries.md commits to.
+- Multi-user / multi-tenant isolation on a shared machine (OS permissions are the existing
+  boundary; the product adds none of its own).
+- A machine already compromised at the OS level (a root-level attacker can read anything
+  regardless of what this product does).
+- Supply-chain integrity of the Go toolchain or dependencies — real risk, but a
+  build/release-process concern, not this threat model's.
+
+## 2. Making the local-only guarantee testable
+
+**INFERENCE — the line that must not blur.** "Our code calling out" is a defect; "an
+agent the user configured calling out" is the user's own egress. The precise test: did
+the *controller/core process* itself open a socket, or did a *child process the user
+started with a user-supplied execution profile* open one? The core opening any socket
+(other than a future explicit, documented local pipe/bridge for a GUI adapter) is always
+a violation, unconditionally. A child agent process opening a socket is never a violation
+of this guarantee by itself — but it must be observable and it must have required the
+user's opt-in profile configuration to happen, never a default.
+
+**INFERENCE — the concrete, automatable observation (proposed for Phase 4):**
+1. Run the controller binary alone (no agent started) under a network-denying harness
+   (Linux network namespace with no route, or a syscall filter on `connect`/`socket`, or a
+   deny-and-log firewall rule) across the full lifecycle: install, first run, workspace
+   create, task/message commands, shutdown. Assert **zero** outbound connection attempts.
+   This alone proves the core's own egress claim, independent of agents.
+2. Separately, run the controller with one agent profile started, pointed at a decoy
+   DNS/HTTP sink the harness controls. Assert observed egress traces to the *child
+   process*, not the controller, and only occurs after a recorded profile-approval event
+   preceding any connection.
+3. Repeat step 1 with no agents ever registered and no credentials present, and confirm
+   the full local cycle still succeeds — proving locality doesn't silently depend on
+   outbound reachability.
+4. Make this a CI gate on every release build, not a one-time Phase 4 check, so a future
+   dependency can't reintroduce a phone-home path unnoticed.
+
+**UNKNOWN.** Which sandboxing primitive (network namespace vs. syscall filter vs. firewall
+log) is available and reliable on every platform in the release matrix has not been
+decided; that matrix itself is still open per ADR 0001.
+
+## 3. Five non-negotiable, checkable rules
+
+1. **No network client import in the core module.** Core package and transitive
+   dependencies may not import `net`, `net/http`, or any third-party networking package.
+   Checkable by `go list -deps` in CI — a diff of the dependency list, no judgment call.
+2. **No telemetry, update-check, or crash-report call anywhere in the codebase.** Any
+   outbound call outside the `ProcessSupervisor` adapter's documented child-spawn path is
+   banned. Reviewer checks one yes/no: does this PR add a way to leave the process other
+   than starting a user-configured child?
+3. **All filesystem writes stay under the workspace root the host was given.** Every write
+   goes through `StateStore`/`Mailbox`/`OutputJournal`, each resolving and rejecting `..`,
+   absolute escapes, and symlink escapes before any write. Checkable: a test harness
+   asserting no write-mode file descriptor is ever opened outside the resolved root.
+4. **Secrets never appear in an event, snapshot, log, or command payload.** Any field
+   reaching `StateStore`/`StateEvents` is checked in CI against a deny-list of
+   secret-shaped field/env-var names; a new schema field matching it fails the build.
+5. **Every `ProcessSupervisor.Start` requires a pre-registered, user-approved execution
+   profile — no ad hoc argv, no shell interpolation, no implicit inherited environment.**
+   `Start` rejects any spec whose profile ID lacks a prior recorded approval event; the
+   adapter never invokes `/bin/sh -c`.
+
+## 4. What worries me that the plan doesn't mention
+
+**INFERENCE — my top concern.** The plan treats "agent egress is the user's own" as a
+clean line, but message envelopes and task/message *content* are exactly the kind of data
+that a compromised or careless agent can use to attack the *next* agent or the human, not
+the network. Nothing in boundaries.md addresses content-level injection: a task title or
+message body crafted so that when a second agent reads it (as instructions, since these
+tools are LLM-driven) it manipulates that agent into writing malicious files into the workspace, running
+destructive commands, or exfiltrating secrets through its *own* legitimate,
+user-approved provider connection — which would not trip any network test above, because
+that channel is explicitly permitted. This is the most likely way this product gets
+someone hurt: not the core phoning home, but one agent using its already-authorized
+model-provider connection as a covert exfiltration path for data another agent or the
+human placed in the shared workspace, triggered by adversarial content sitting in a task
+or message file. The plan has no mention of content provenance, no note that agents
+should treat workspace file content as untrusted input, and no requirement that
+credential material stay out of anything an agent can read from the workspace. I'd add:
+agents must never get direct read access to credential material (the core holds none;
+the ProcessSupervisor adapter should pass credentials via environment only to the process
+that needs them, never write them into a workspace-visible file), and the docs should say
+plainly that a malicious task/message body can manipulate a downstream agent — a risk the
+network guarantee does not eliminate.
