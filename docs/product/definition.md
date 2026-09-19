@@ -50,3 +50,35 @@ Use factual output: “Task T-12 assigned to reviewer.” “Result recorded; aw
 Documentation starts with a runnable local workflow, explains what data is written where, and states responsibility for configured agent connections. Use “workspace,” “agent,” “task,” and “message”; keep “hive” as a protocol metaphor, not an office role-play.
 
 Avoid sitcom names, character avatars, office-floor visuals, and borrowed slogans. **UNKNOWN:** whether “Harnessing 101” is available and whether it sounds like a course rather than a working tool. Owner-approved naming and originality review should settle that before release. No reference implementation, assets, or copy were inspected for this definition.
+
+## Content provenance and the honest local-only promise (H101-8)
+
+### The promise
+
+**INFERENCE — proposed README promise, contingent on implementation and verification:** “Harnessing 101 runs completely locally and makes no external connections itself; agents you configure may send content they can access to external services, and Harnessing 101 does not confine those agents or guarantee that your data stays on this machine.”
+
+**SECONDARY SOURCE — design basis:** [Threat model, sections 2–4](../security/threat-model.md) separates controller traffic from agent traffic and identifies malicious workspace content as a way to influence an agent through its already-approved connection. This is a design review, not an observed incident. **CODE-PATH FACT:** none established for this proposed experience; there is no verified enforcement to advertise here.
+
+**INFERENCE — meaning for users:** local records and a controller that never connects externally are the promise. Protection against misleading instructions in messages, unrestricted agent file access, or disclosure through an approved provider is not. Provider approval is not approval of every later message, and origin information is not proof that content is safe. Do not describe the workspace as a confidentiality boundary or show a “safe” badge beside an approved profile.
+
+### What users see, and when
+
+**INFERENCE — normal reading:** every task or message view should show a compact origin line: claimed author, how it entered the workspace, recorded time, task reference, and verification status. For example: “Claims sender: reviewer · imported file · identity unverified · task T-12.” Separately show any controller-recorded submission identity, with the limits of that mechanism. A sender field in a writable file is not authenticated authorship. A quoted instruction claiming to be from the user remains content from that message, not a user decision.
+
+**INFERENCE — history:** the detail view should retain the original message reference, known forwarding links, and the exact content version to which acknowledgement or acceptance applied. Summaries should identify their author and source messages; missing links should say “origin incomplete.” Preserve what the controller actually recorded, without pretending to reconstruct an agent's reasoning or unknown sources. Keep credentials out of these records. Origin context should accompany the content delivered to another agent as well as the human display, explicitly identifying it as untrusted input; that label cannot ensure an agent obeys it.
+
+**INFERENCE — interruptions:** do not prompt for every inter-agent message. Interrupt before the product enables a new execution profile or a changed provider, executable, credential reference, workspace access declaration, or tool capability. Present the change and require renewed approval. Hold product-mediated use of a profile whose approval is missing or no longer matches. If provenance required for a handoff is missing or inconsistent, hold that handoff for inspection, with options to reject or explicitly continue as unverified; approval must not relabel its origin as verified. Ordinary origin metadata and acknowledged-message history belong in inspectable records, not repeated warnings.
+
+**UNKNOWN — detection:** what identity and tamper checks can reliably support those interruptions is unsettled. Architecture and security review must define the verification mechanism and its limits before the interface offers a verified-origin label. Do not promise detection of malicious prose or interception of network calls made independently by an agent.
+
+### Approving an agent's external access
+
+**INFERENCE — approval summary:** show the local program and fixed invocation, intended task, declared readable locations and tools, configured provider and destination, credential reference names without values, and whether any restriction is actually enforced. Explain: “This agent may send prompts, messages, and files it can read to [configured provider]. These destinations are declared configuration, not an enforced network allowlist.” Unknown destinations or access scope must remain visibly unknown; do not substitute reassuring defaults.
+
+**INFERENCE — decision:** offer approve this specific profile revision, edit, or cancel. Record the approving user action and revision locally. An agent-authored message cannot grant or expand that approval. Users should be able to withdraw approval for future product-managed starts; withdrawal does not recall transmitted data or stop an independently running process. Actual provider retention and onward handling are **UNKNOWN** until the user reviews the chosen provider's applicable terms and configuration; profile approval must not invent that assurance.
+
+### Cost to the minimum useful product
+
+**INFERENCE — do not defer provenance past Phase 1.** Persist origin, verification limitations, source references, and approval/acceptance bindings in the first usable record format. Exercise them in the headless handoff scenario, including unverified file input. Phase 2 adds compact displays and decisions. Rich history visualization can wait; the facts it would display cannot.
+
+**INFERENCE — real cost:** this adds setup and review friction to the two-agent trial. Use one reusable approval per unchanged profile, not per message. Manually started agents remain outside the product's start gate: registering a profile documents consent but cannot prevent the user launching another command or changing that process. Enforcing approved profiles at product-managed start belongs to Phase 3. The Phase 2 walkthrough must disclose this gap rather than imply existing sessions were validated. Measure this extra effort in the terminals-versus-coordination trial; provenance is necessary context, not evidence that the product is useful or that the injection risk is solved.

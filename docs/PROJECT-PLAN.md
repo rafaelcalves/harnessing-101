@@ -109,6 +109,14 @@ harness across the full lifecycle and assert zero outbound attempts from the con
 process; then run it with one agent profile against a decoy sink and confirm any egress
 traces to the child process rather than the controller, and follows a recorded approval
 event.
+
+**What that test does NOT prove, stated here because I overclaimed it once already.** It
+covers the controller's own egress, which is zero in every phase, and — only for agents the
+product itself starts — that observed egress traces to an approved profile. It says nothing
+about a manually started agent. In Phases 1 and 2 every agent is manually started, so for
+those phases **nothing enforces the boundary**: the product has no process to gate and no
+approval event, and it relies entirely on the user running commands they trust. See
+[the threat model](security/threat-model.md), section 5.
 Exit: a tagged release an outside user can install and run.
 
 ## How the team works on this

@@ -95,3 +95,82 @@ No `CONTRIBUTING.md`, CI, or commit-identity guard in tree. Agent file-protocol 
 ### Verdict
 
 Directionally coherent, but **not consistent on stack and approval status**. Resolve acceptance/acknowledgement semantics before Phase 1 code.
+
+---
+
+## H101-7 acceptance review (2026-09-19)
+
+**Card:** Stanley's semantic corrections to `docs/architecture/boundaries.md`. **Verdict: ACCEPT.**
+
+Reviewed against the 14 DoD criteria. H101-7 is a documentation card; criteria 11–14 (code) are N/A. Criteria 1–10 satisfied for this card's scope.
+
+### DoD checklist (documentation)
+
+| # | Result | Note |
+| --- | --- | --- |
+| 1 Traceability | Pass | Maps to `definition.md` §2 and audit findings 4–5; rationale at `boundaries.md` lines 79–83 |
+| 2 Evidence labels | Pass | INFERENCE and SECONDARY SOURCE used throughout |
+| 3 Honest verification | N/A | No executable verification on this card; Phase 2 scenario correctly labelled proposed (`boundaries.md` line 75) |
+| 4 Scope discipline | Pass | Semantics only; ten ports unchanged |
+| 5 Status accuracy | Pass | Header still "Proposed, Phase 0; no implementation" |
+| 6 Cross-artefact consistency | Pass | Resolves product-vs-ports gaps without new contradictions. Audit findings 1–3 (plan/ADR stack, evidence labels in definition.md) remain open elsewhere |
+| 7 QA sign-off | Pass | This section |
+| 8 Resolvable references | Pass | Links to `definition.md` and this file resolve |
+| 9 Checkable exits | Pass | Phase 2 scenario expanded with concrete assertions (see below) |
+| 10 Terminology | Pass | Hive/workspace defined at line 9 per owner ruling |
+
+### Finding 4 — reported complete vs human acceptance: **CLOSED**
+
+Checked against `definition.md` lines 19–21 and 25 (not Stanley's summary).
+
+| Product rule | Port expression |
+| --- | --- |
+| "result ready for review" (`definition.md` line 21) | `AwaitingReview` state (`boundaries.md` line 24) |
+| "Reported complete" ≠ acceptance (lines 21, 25) | `ReportTaskResult` → AwaitingReview; only `AcceptTaskResult` → Done (`lines 26–28`) |
+| Generic bypass removed | `TransitionTask` permits only Todo→Doing, Doing→Blocked, Blocked→Doing, Done→Todo reopen; transitions into AwaitingReview or Done fail InvalidArgument (`line 24`) |
+| Human can reject (`definition.md` line 23) | `RejectTaskResult` → Doing with reason (`line 28`) |
+| Survives restart (`definition.md` line 21) | AwaitingReview persists until decision, including across restart (`line 26`) |
+| Reporter on status (`definition.md` line 21) | Actor identities and timestamps on all task updates (`line 30`) |
+
+No challenge. The dedicated commands enforce what the product requires.
+
+### Finding 5 — acknowledgement semantics: **CLOSED**
+
+Checked against `definition.md` lines 19–20.
+
+| Product rule | Port expression |
+| --- | --- |
+| See whether message recorded or acknowledged (line 19) | Four separate facts — queued, published, processed, acknowledged — exposed by `GetMessage` and snapshots (`boundaries.md` lines 20, 57) |
+| Acknowledgement ≠ work done (line 20) | `AcknowledgeMessage` "proves neither comprehension nor work completion" (`line 32`); task results are separate (`line 57`) |
+| Recipient-scoped | Only caller scoped to recipient may acknowledge; wrong recipient → Denied (`lines 32, 75`) |
+| Not inferred from publication | Absent acknowledgement labelled "not acknowledged"; ingestion ≠ acknowledgement (`lines 57–58`) |
+| File-protocol path | `MessageAcknowledgement` control record through same core checks (`lines 59, 75`) |
+
+No challenge.
+
+### Finding 6 — hive vs workspace: **CLOSED**
+
+Owner ruling: hive = agent team; workspace = on-disk directory.
+
+`boundaries.md` line 9 matches: "A **hive** is the team of agents organising itself; a **workspace** is the on-disk directory the tool owns and writes." Grep of the file shows **hive** appears only at lines 9 and 81 (definitions/rationale). All operational references use **workspace** for storage and command scope. No swapped usage found.
+
+### Phase 2 acceptance scenario (`boundaries.md` line 75)
+
+**Checkable?** Yes, with one implementation-time dependency.
+
+The scenario lists discrete, assertable outcomes: wrong-recipient acknowledgement → Denied; agent acceptance → Denied; direct Doing→Done rejected; stale-result acceptance → Conflict; duplicate acknowledgements/decisions create no duplicate facts; AwaitingReview survives restart without becoming Done; reject/re-accept cycle; command and file-control acknowledgement paths; both adapters produce identical state; Phase 3 ops return Unsupported.
+
+**Would it catch a real regression?** Yes, for the failure modes this card fixed: bypassing dedicated accept/ack commands, conflating publish/ingest with acknowledgement, auto-promoting reported results to Done on restart or replay. The assertions are behavioural, not cosmetic.
+
+**Gap (not a reject):** "identical normalized state/events" needs a defined comparison schema at implementation time. Host-policy test harness for "authorized human" must be specified in the test plan. Without those, two adapters could pass while formatting differs — but the domain-rule regressions would still be caught.
+
+### Phase 0 milestone — still outstanding
+
+Not judged on this card (per dispatch):
+
+- Kevin scaffold report not yet received (Ryan confirmed `go build`, `test`, `vet`, `gofmt` on Go 1.27.1 independently)
+- `CONTRIBUTING.md`, licence, conduct, issue/PR templates
+- CI pipeline and commit-identity guard
+- Threat-model baseline
+- `PROJECT-PLAN.md` still recommends TypeScript while ADR 0001 accepts Go (audit finding 1)
+- Agent file-protocol walkthrough remains **UNKNOWN** (`definition.md` line 27)

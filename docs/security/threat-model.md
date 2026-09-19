@@ -121,3 +121,66 @@ the ProcessSupervisor adapter should pass credentials via environment only to th
 that needs them, never write them into a workspace-visible file), and the docs should say
 plainly that a malicious task/message body can manipulate a downstream agent — a risk the
 network guarantee does not eliminate.
+
+## 5. Manual-start exposure in Phases 1-2 (H101-11)
+
+**Context.** Rule 5 ("`ProcessSupervisor.Start` requires a pre-registered, user-approved
+profile") only binds agents the *product* starts. Process control is Phase 3. The
+Phase 1-2 minimum useful product is explicitly two manually started agents plus one
+human, per [definition.md](../product/definition.md). Rule 5 does not bind that
+population at all, in either phase.
+
+**1. What actually protects a workspace in Phases 1-2, if anything.** **INFERENCE, and
+stated bluntly because a soft answer here is worse than a blunt one: nothing enforces it.
+The controller has no process, no start gate, and no approval event to withhold — it
+relies entirely on the user to only run agent commands they trust, by hand, outside the
+product's view.** The product's only contribution in those phases is *record-keeping*: a
+message envelope's writable sender field, a task's declared owner, and whatever the human
+chose to type — none of it authenticated, none of it enforced. This is exactly the gap
+Angela named: writable sender fields do not authenticate authorship, configured
+destinations are not an enforced allowlist, and approval does not sanitize content. In
+Phases 1-2 there isn't even a profile-approval event to point to; the exfiltration path
+from section 4 (an agent's own connection, triggered by adversarial workspace content) is
+live from day one, with zero product-side mitigation beyond what the human notices.
+
+**2. Whether this changes the Phase 4 test.** No — but its scope claim must be stated
+precisely. **INFERENCE.** The section 2 test proves: the controller itself never
+originates egress (unconditionally, all phases), and — only for product-started
+children — that observed egress traces to a specific child process following a recorded
+approval event. A manually started agent in Phase 1-2 is not the controller's child, has
+no approval event, and is invisible to `ProcessSupervisor` entirely; the test cannot
+observe it, attribute its traffic, or prove anything about its behavior. Do not describe
+the Phase 4 test as validating "agent egress is controlled" in Phases 1-2 — it validates
+only that the controller's own egress is zero. That is a true and useful claim; it is not
+the same claim as "agent egress is visible," which requires Phase 3 process control to be
+true at all.
+
+**3. Whether this is a reason to reconsider phase order.** **This is my finding, offered
+to the owner, not a request to relitigate sequencing.** There is a security argument, and
+it is narrow: in Phases 1-2 the product cannot observe, attribute, or gate *any* agent
+process, manually started or not — the entire exfiltration path in section 4 is live with
+no product-side control the whole time process control sits in Phase 3. That is a real
+window, not a hypothetical one, and it is open for two full phases. Whether that risk is
+acceptable given the phase's stated scope (a two-agent, human-supervised trial, small
+blast radius, no claim of enforcement made to the user) is a product-risk-tolerance
+call, not a security-only one — I am not asserting the window makes Phases 1-2 unsafe to
+ship, only that it exists and is total, not partial. If the owner reads the honest
+mitigation below and decides that is not enough for what gets shipped or advertised in
+Phase 2, that is the trigger to reconsider order, not this section.
+
+**4. Cheapest honest mitigation for Phases 1-2.** **INFERENCE.** Record what was observed,
+never claim what was controlled. Concretely and cheaply, before Phase 3 exists:
+- Every message/task envelope already carries the origin metadata Angela specified
+  (claimed sender, entry mechanism, timestamp, verification status = unverified). Ship
+  that from Phase 1, not later — it is the only honest signal available.
+- Add one line, unconditionally visible, not a one-time onboarding screen: "Harnessing
+  101 does not start, observe, or restrict any agent process in this phase. Nothing here
+  confirms which program produced this content." Do not let a compact origin display
+  read as a safety indicator.
+- Do not implement any UI element that could be mistaken for validation (a checkmark, a
+  "verified" badge, a green status) attached to manually reported content in Phases 1-2 —
+  definition.md already asks for this ("do not show a 'safe' badge"); this section adds
+  that the same restraint applies to any manually-sourced record, not only
+  provider-approved ones.
+- This is disclosure, not defense. It costs a docs line and a UI restraint, not an
+  engineering project, and it is the ceiling of what Phases 1-2 can honestly claim.
