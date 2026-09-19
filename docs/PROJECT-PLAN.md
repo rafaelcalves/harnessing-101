@@ -25,7 +25,13 @@ Repository: https://github.com/rafaelcalves/harnessing-101 (currently PRIVATE an
 These come from the project owner and are not open for the team to relitigate:
 
 1. **Runs completely locally.** The product must not reach anything outside the user's
-   machine by itself. No telemetry, no phone-home, no hosted service, no implicit network
+   machine by itself. **The approved public wording is narrower than that sentence and is
+   the one that ships** (owner-approved 2026-09-19): "Harnessing 101 runs completely
+   locally and makes no external connections itself; agents you configure may send content
+   they can access to external services, and Harnessing 101 does not confine those agents
+   or guarantee that your data stays on this machine." Do not restore the shorter claim in
+   the README or anywhere user-facing — it is not true, for the reasons in
+   [the threat model](security/threat-model.md), sections 4 and 5. No telemetry, no phone-home, no hosted service, no implicit network
    calls. If a user configures an agent that itself calls a model provider, that is the
    user's own configured egress, not ours — and it must be visible and opt-in.
 2. **Decoupled architecture.** The user interface is a replaceable adapter. Swapping the
