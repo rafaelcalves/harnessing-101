@@ -6,24 +6,22 @@ Harnessing 101 is a local-first tool for coordinating agent work through inspect
 
 Use an issue to establish the problem, expected behavior, and acceptance evidence before writing a substantial change. Security vulnerabilities and conduct reports must use the private routes in `SECURITY.md` and `CODE_OF_CONDUCT.md`, not public issues.
 
-The project is written in Go. Install the version declared in `go.mod`; do not assume a different local version is supported.
+The project is written in Go 1.27.1, as declared in `go.mod`; do not assume a different local version is supported. It currently has no external Go module dependencies. A new dependency needs a concrete justification and review of its licensing, maintenance, build, and runtime behavior.
 
 ## Configure this checkout
 
 Commits in this repository require the project's author identity. Configure it locally, never globally:
 
 ```sh
-git config --local user.name "Rafael Correa Alves"
 git config --local user.email "rafael.ca.dev@gmail.com"
-git config --local core.hooksPath githooks
+git config core.hooksPath githooks
 ```
 
 Confirm the effective settings:
 
 ```sh
-git config --local --get user.name
 git config --local --get user.email
-git config --local --get core.hooksPath
+git config --get core.hooksPath
 ```
 
 The repository hook rejects commits whose effective author email is not the required project email. Do not bypass it. If the hook fails unexpectedly, report the exact output instead of committing with verification disabled.
@@ -36,10 +34,11 @@ Run commands from the repository root:
 go build ./...
 go test ./...
 go vet ./...
+golangci-lint run ./...
 test -z "$(gofmt -l .)"
 ```
 
-Run `gofmt -w` on changed Go files before the final check. Add or update tests for behavior changes. A passing test suite does not replace a focused test that demonstrates the new behavior or regression.
+Continuous integration runs build, test, vet, and golangci-lint. Run `gofmt -w` on changed Go files before the final check. Add or update tests for behavior changes. A passing test suite does not replace a focused test that demonstrates the new behavior or regression.
 
 The installed product must not make implicit network calls. New dependencies, update checks, telemetry, network listeners, or agent-provider integrations require explicit review even if tests pass. Build-time dependency acquisition and user-configured agent egress must remain distinguishable from product runtime behavior.
 
@@ -70,4 +69,8 @@ Suitable examples include improving one validation error, adding a focused test 
 
 Complete the pull request template. Explain the user-visible outcome, test evidence, local-only impact, architecture impact, and recovery or compatibility risk. Keep generated output, credentials, personal workspace data, and agent transcripts out of commits.
 
-By submitting a contribution, you agree that it may be distributed under the licence in the repository's root `LICENSE` file. The project should not invite or merge outside contributions until the owner approves a licence and that file exists.
+## Licence terms for contributions
+
+The project is licensed under Apache License 2.0. Unless you explicitly mark a submission as “Not a Contribution,” an intentionally submitted contribution is provided under Apache-2.0 without additional terms. This includes the licence's copyright and patent grants.
+
+Preserve applicable copyright, patent, trademark, and attribution notices. Modified files distributed as part of a derivative work must carry prominent notices stating that they were changed. Identify modified files clearly in the pull request and add file-level change notices where Apache-2.0 requires them.

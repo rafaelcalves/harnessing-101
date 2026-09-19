@@ -20,7 +20,7 @@ This code applies in project repositories, reviews, issue trackers, community sp
 
 ## Reporting
 
-Report conduct concerns privately to **[CONDUCT_CONTACT]**. Do not open a public issue when a report identifies a person, contains private information, or could expose someone to retaliation.
+Report conduct concerns privately to **rafael.ca.dev@gmail.com**. Do not open a public issue when a report identifies a person, contains private information, or could expose someone to retaliation.
 
 Include the relevant dates, locations, participants, what happened, and any records the reporter is comfortable sharing. Reports will be limited to people needed to assess and act on them. Absolute confidentiality cannot be promised when safety or law requires disclosure, but unnecessary disclosure is not acceptable.
 

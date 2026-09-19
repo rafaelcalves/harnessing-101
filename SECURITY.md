@@ -6,7 +6,7 @@ Before the first release, security fixes target the current default branch. Rele
 
 ## Report a vulnerability privately
 
-Send vulnerability reports to **[SECURITY_CONTACT]**. The owner must replace this placeholder with a monitored private route before the repository becomes public.
+Send vulnerability reports to **rafael.ca.dev@gmail.com**.
 
 Do not open a public issue, discussion, or pull request for an undisclosed vulnerability. Do not include credentials, tokens, private agent messages, personal workspace contents, or unnecessary production data in a report.
 

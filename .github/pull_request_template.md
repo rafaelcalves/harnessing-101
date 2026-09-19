@@ -16,6 +16,7 @@ Commands run and relevant results:
 go build ./...
 go test ./...
 go vet ./...
+golangci-lint run ./...
 test -z "$(gofmt -l .)"
 ```
 
@@ -42,7 +43,7 @@ Use `None` only after checking the change. Explain every non-none answer.
 - [ ] The issue and acceptance criteria are linked.
 - [ ] The change is focused and avoids unrelated cleanup.
 - [ ] Tests cover the new behavior or regression.
-- [ ] Build, tests, vet, and formatting checks pass.
+- [ ] Build, tests, vet, lint, and formatting checks pass.
 - [ ] Contributor and user documentation is updated where needed.
 - [ ] Accepted architecture decisions remain intact, or a superseding ADR is linked.
 - [ ] Local-only behavior remains intact, or the visible opt-in exception is documented and reviewed.
