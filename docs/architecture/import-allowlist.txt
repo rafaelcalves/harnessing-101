@@ -7,15 +7,13 @@
 #
 # Production packages allowed to import the concrete state store:
 github.com/rafaelcalves/harnessing-101/internal/adapters/statestore
-github.com/rafaelcalves/harnessing-101/internal/host
-github.com/rafaelcalves/harnessing-101/internal/headless
+github.com/rafaelcalves/harnessing-101/internal/host # sole composition root; constructs FileStore privately; does not expose persistence.
 
 # Production packages allowed to import the ports package, which contains the
 # outbound persistence contract:
 github.com/rafaelcalves/harnessing-101/internal/adapters/statestore
 github.com/rafaelcalves/harnessing-101/internal/core/task
-github.com/rafaelcalves/harnessing-101/internal/host
-github.com/rafaelcalves/harnessing-101/internal/headless
+github.com/rafaelcalves/harnessing-101/internal/host # sole composition root; injects persistence privately; does not expose mutation.
 
 # Test-only exception: statestore and its own *_test.go files may exercise
 # arbitrary StateStore mutations for adapter contract tests. `go list`'s
