@@ -8,6 +8,10 @@ Harnessing 101 is an early-stage, local-first tool for coordinating AI agent wor
 
 **The product itself does not yet start, observe, or restrict agents; you start agents by hand in the current phases, and content received from another agent is unverified.**
 
+To use the product from a clean clone, follow the runnable
+[Getting started guide](docs/GETTING-STARTED.md). It covers the complete first
+task, message, acknowledgement, result, and human-review cycle.
+
 If a workspace will not open, follow [Workspace lock troubleshooting](docs/TROUBLESHOOTING.md) before changing or deleting any file.
 
 ## Understanding command receipts
