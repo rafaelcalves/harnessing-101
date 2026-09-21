@@ -70,7 +70,7 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 | 2 | Restart after crash | **Partially** — linux crash-reopen with state (`f242b2b`); handoff visibility now CLI-provable (`message`); crash test still uses host for ack survival; darwin manifest still needed |
 | 3 | Swappability (ADR 0003 UI-01–08) | **No** — `throwawayadapter` exists (`7dc7809`); no `adaptercontract` suite; UI-01–08 not run on both adapters |
 | 4 | Containment preserved | **Satisfied** — store half (`24a2022`); presentation imports `api` only; `internal/assembly` sole `host` importer (`9a6b464`) |
-| 5 | Mailbox adapter (H101-22) | **No** — `FileMailbox` + `Deliverer` (`7247dc3`); not wired in assembly; no full send→publish→process→ack integration test |
+| 5 | Mailbox adapter (H101-22) | **Satisfied** — wired in `assembly.WithSession` (`6bae581`); full-path integration test; sole-writer by call-graph + containment (limit: methods remain on `host.Capabilities`) |
 | 6 | First-run disclosure (H101-16) | **Satisfied** — every invocation, stderr, ADR 0002 sentence, CI tests (`1eda92b`) |
 | 7 | Phase 3 ops `Unsupported` | **Satisfied** — `StartRun`/`StopRun`/`SetRunBudget` on `api.FrontendSession` return `Unsupported`; named test per op (`20e0caa`); no CLI subcommands (allowed) |
 | 8 | Zero network (CLI tree) | **Satisfied** — `go list -deps ./cmd/harnessing` finds no `net`/`net/http` (`24a2022`) |
@@ -1834,8 +1834,30 @@ Same class as item 7 naming rule. **Follow-up:** add `TestDeliverer_IngestAcks_Q
 | 2 | **Partially satisfied** |
 | 3 | **Not satisfied** — second adapter exists; contract suite + UI-01–08 on both outstanding |
 | 4 | **Satisfied** |
-| 5 | **Not satisfied** — mailbox adapter built; assembly wiring + full-path integration test outstanding |
+| 5 | **Satisfied** — `6bae581`: assembly wiring + full-path test; sole-writer by call-graph (limit: `host.Capabilities` still exposes record methods) |
 | 6 | **Satisfied** |
 | 7 | **Satisfied** |
 | 8 | **Satisfied** |
 | 9 | **N/A** |
+
+### H101-88 — Kevin item 5 re-ruling (`6bae581`)
+
+**Verdict:** ACCEPTED — item 5 **SATISFIED** with documented limit on sole-writer enforcement.
+
+**God request:** Re-rule item 5 on `6bae581` after Kevin H101-85 closed three H101-83 gaps. God verified full suite + race green. Do not review contract suite or walkthrough assertion change.
+
+**Gap closure verified:**
+
+1. **Assembly wiring** — `assembly.WithSession` calls `driveMailbox` after every command: `DeliverPending` → `IngestPending` → `IngestAcks`. Mailbox failure logs to stderr and does not fail the command. `TestWithSession_MailboxDeliveryFailureDoesNotFailTheCommand` passes.
+
+2. **Real end-to-end** — `TestWithSession_FullMailboxPath_SendPublishProcessAck` passes: real engine + `FileStore` + `FileMailbox` through `WithSession`; external ack via `WriteAck` + second session ingests it.
+
+3. **Sole writer** — Within repo call graph, only `assembly/driveMailbox` passes `host.Capabilities` to `mailbox.Deliverer`; `cmd/harnessing` holds only `api.FrontendSession` (no recorders); import allowlist restricts `host` to `internal/assembly`. **Limit recorded:** `host.Capabilities` still exposes `RecordMessagePublished`/`RecordMessageProcessed` — enforcement is call-graph + containment, not type-erasure. Optional follow-up when owner funds type-level hardening; not a Phase 2 item 5 blocker (same class as package-level vs type-level FrontendSession check in H101-73).
+
+4. **NotFound quarantine** — `TestDeliverer_IngestAcks_QuarantinesNotFound` exists and passes (`deliverer_test.go`).
+
+**Item 5 ruling:** **SATISFIED** — all three H101-83 gaps closed for Phase 2 product path. Residual sole-writer limit documented above; does not block exit.
+
+**Out of scope (per god):** contract suite (still absent); walkthrough assertion change (ruled correct by god).
+
+**Next:** H101-55 darwin manifest (item 1). Contract suite when fresh temp delivers. Optional follow-up: remove record methods from `host.Capabilities` for type-level sole-writer.
