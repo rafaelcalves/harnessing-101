@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "tool": "Codex",
+  "executable": "codex",
+  "version": {"args": ["--version"], "successExitCodes": [0]},
+  "auth": {
+    "detectionMode": "runtime-output",
+    "requiredPatterns": ["login", "authenticate", "api key", "not logged in", "credentials"],
+    "networkRefusedPatterns": ["api.openai.com", "network is unreachable", "connection refused", "timed out"],
+    "notes": "Untested descriptor. Authentication detection is runtime-only until a documented local status command exists."
+  },
+  "invocation": {
+    "managedStart": {
+      "args": ["start-run", "-workspace", "{workspace}", "-workspace-id", "{workspace_id}", "-run", "{run_id}", "-agent", "{agent_id}", "-profile-id", "{profile_id}", "-task", "{task_id}"],
+      "contextMode": "profile-context"
+    }
+  },
+  "participation": {
+    "requiredSignals": ["task", "workspace", "participation"],
+    "completionSignals": ["cycle_completed", "acceptance_history", "ownership"],
+    "failureSignals": ["unsupported", "authentication", "network", "spawn"]
+  },
+  "humanInterventions": ["setup and assignment", "answer blocker", "reject once", "accept corrected result"],
+  "friction": ["descriptor not tested on this machine"]
+}

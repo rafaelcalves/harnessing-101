@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Harnessing 101 agentic CLI descriptor proposal",
+  "type": "object",
+  "required": ["schemaVersion", "tool", "executable", "version", "auth", "invocation", "participation"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "tool": {"type": "string", "minLength": 1},
+    "executable": {"type": "string", "minLength": 1},
+    "version": {
+      "type": "object",
+      "required": ["args", "successExitCodes"],
+      "properties": {
+        "args": {"type": "array", "items": {"type": "string"}},
+        "successExitCodes": {"type": "array", "items": {"type": "integer"}}
+      }
+    },
+    "auth": {
+      "type": "object",
+      "required": ["detectionMode", "requiredPatterns", "networkRefusedPatterns"],
+      "properties": {
+        "detectionMode": {"enum": ["runtime-output", "external-owner-check"]},
+        "requiredPatterns": {"type": "array", "items": {"type": "string"}},
+        "networkRefusedPatterns": {"type": "array", "items": {"type": "string"}},
+        "notes": {"type": "string"}
+      }
+    },
+    "invocation": {
+      "type": "object",
+      "required": ["managedStart"],
+      "properties": {
+        "managedStart": {
+          "type": "object",
+          "required": ["args", "contextMode"],
+          "properties": {
+            "args": {"type": "array", "items": {"type": "string"}},
+            "contextMode": {"enum": ["profile-context", "prompt", "stdin", "unsupported"]}
+          }
+        }
+      }
+    },
+    "participation": {
+      "type": "object",
+      "required": ["requiredSignals", "completionSignals"],
+      "properties": {
+        "requiredSignals": {"type": "array", "items": {"type": "string"}},
+        "completionSignals": {"type": "array", "items": {"type": "string"}},
+        "failureSignals": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "humanInterventions": {"type": "array", "items": {"type": "string"}},
+    "friction": {"type": "array", "items": {"type": "string"}}
+  }
+}
