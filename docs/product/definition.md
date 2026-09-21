@@ -82,3 +82,45 @@ Avoid sitcom names, character avatars, office-floor visuals, and borrowed slogan
 **INFERENCE — do not defer provenance past Phase 1.** Persist origin, verification limitations, source references, and approval/acceptance bindings in the first usable record format. Exercise them in the headless handoff scenario, including unverified file input. Phase 2 adds compact displays and decisions. Rich history visualization can wait; the facts it would display cannot.
 
 **INFERENCE — real cost:** this adds setup and review friction to the two-agent trial. Use one reusable approval per unchanged profile, not per message. Manually started agents remain outside the product's start gate: registering a profile documents consent but cannot prevent the user launching another command or changing that process. Enforcing approved profiles at product-managed start belongs to Phase 3. The Phase 2 walkthrough must disclose this gap rather than imply existing sessions were validated. Measure this extra effort in the terminals-versus-coordination trial; provenance is necessary context, not evidence that the product is useful or that the injection risk is solved.
+
+## Agent retirement: stop offering new work, preserve the record (H101-29)
+
+**INFERENCE — product decision:** the minimum useful product needs a human-controlled way to stop offering new work to an agent while retaining its identity and history. Include this by the Phase 2 usable-work milestone; it need not block Phase 1's current containment work. Decide the behavior now so architecture can accommodate it deliberately. An append-only historical roster is acceptable; a roster where every historical participant remains a valid destination indefinitely is not.
+
+**CODE-PATH FACT — narrow baseline:** [records.go](../../internal/core/domain/records.go) currently gives an agent an identity, display name, profile reference, and provenance, but no retirement information. Tasks and messages retain agent references. **SECONDARY SOURCE:** [boundaries.md](../architecture/boundaries.md) describes registration and updates without a retirement operation. This is a review of the record definition and documented contract, not a test of the engine.
+
+### Why it belongs in the minimum
+
+**INFERENCE:** a two-agent workflow can outlive either manually started session. Once the user decides a participant will not receive further work, keeping it available for assignment creates avoidable dead-end handoffs. That undermines the product's central promise of understandable ownership and durable coordination, even with a small roster. Merely hiding a name would leave direct addressing and agent-generated assignments able to repeat the mistake.
+
+**INFERENCE — language:** describe the action as “Retire from new work.” It means a human has removed this participant from future assignments and new message delivery, not that a process has exited or that existing work is complete. A closed terminal, silence, or old activity timestamp must not automatically retire an agent. Use process observations separately when those exist; do not label the remaining roster “running.”
+
+### What happens to the work
+
+**INFERENCE — history:** completed tasks, accepted results, sent messages, and recorded acknowledgements keep their original attribution. Historical views identify the participant as retired without suggesting it was retired when the earlier event happened. Do not erase or transfer authorship to a replacement, reuse the identity for a different participant, or rewrite past acceptance.
+
+**INFERENCE — unfinished tasks:** show affected tasks before retirement and keep them prominent afterward as needing human attention. Preserve their last recorded ownership and progress; identify that the assignee is retired and a handoff may be needed. Do not silently unassign, reassign, complete, reject, or restart anything. The human can explicitly transfer remaining responsibility while preserving prior results and attribution. An already-submitted result remains reviewable without its author being available; rejection or reopening exposes the need for a new owner rather than implying the retired participant will resume.
+
+**INFERENCE — messages:** exclude retired participants from normal assignment and recipient choices, and refuse new work assignments and new messages addressed to them with a clear explanation. Retain pending messages and their actual delivery facts. Show which were unacknowledged at retirement; do not mark them read, cancel them silently, or forward them to a replacement. The user decides whether to send a new, linked handoff elsewhere. Already-published files cannot be recalled from an independently running agent.
+
+**INFERENCE — late activity:** preserve valid acknowledgements of existing messages and valid results for work still assigned to that participant, subject to the usual authority and review checks. They do not reactivate the participant or imply new work was authorized. Once ownership has transferred, a late submission must not replace the current owner's result. Surface it as late material requiring inspection rather than silently adopting it. Retirement is a routing decision, not a security boundary against a process that retains file access.
+
+### Cost, limits, and acceptance
+
+**INFERENCE:** provide one concise retirement outcome showing unfinished tasks and unacknowledged messages, plus persistent labels on those records. Routine history needs no repeated warning. A useful acceptance scenario retires an agent with one accepted task, one unfinished task, and one unacknowledged message: history remains attributable, new routing is refused, and unresolved work stays visible across reopening the interface.
+
+**INFERENCE — non-goals:** this decision does not add process stopping, inactivity detection, credential revocation, automatic replacement, automatic task recovery, deletion of history, or temporary pause/resume scheduling. Restoring a retired participant to new work can wait; a replacement starts with its own identity. It specifies no command names, data model, or lifecycle enumeration.
+
+**UNKNOWN:** how often users replace participants within one workspace, and whether “retire” communicates the intended distinction. Settle in the two-agent walkthrough by asking the user to replace one participant and recover its unfinished work. Confusion may change the wording; it should not make silent reassignment or misleading process status acceptable.
+
+## Workspace revision on command receipts (H101-93)
+
+**INFERENCE — product ruling:** workspace revision means the version of committed workspace state, not the number of commands the user issued. Background recording of message delivery changes that state too. It is not a count of every real-world event: process activity, attempted commands, and work outside the recorded state are not measured by this number. Users should not use revision differences as a productivity or completed-work counter.
+
+**SECONDARY SOURCE:** [adapter-contract ambiguity A3](../../internal/adaptercontract/AMBIGUITIES.md#a3--ui-04-workspace-revision-vs-mailbox-background-commits) reports a cycle of 12 user commands ending at revision 14 because two mailbox facts were recorded. That is consistent with this product meaning; the cycle was not rerun for this ruling.
+
+**INFERENCE — receipt decision:** keep the number and the existing label “workspace revision.” It provides a useful state reference alongside the request identifier without claiming task completion. On a command receipt it identifies the version committed by that request, not a guarantee that this remains the latest workspace version when the user reads it. Background work may already have advanced the workspace. A replayed receipt still describes the original request; it must not imply a new user action occurred.
+
+**INFERENCE — user-facing explanation:** “Workspace revision identifies a recorded version of your workspace; it advances when commands or background delivery record changes, so it is not a count of your commands.”
+
+**CODE-PATH FACT:** [the receipt formatter](../../cmd/harnessing/flags.go) already prints the request identifier and `workspace revision` using the receipt's committed revision. **INFERENCE — documentation consequence:** no change to the CLI receipt line is requested. Put the explanation beside the first receipt example in the README and explain background advances and replayed receipts in troubleshooting guidance. Route those edits to their current documentation owner. This ruling does not decide cross-adapter assertions, exact revision totals, or implementation changes.
