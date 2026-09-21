@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/rafaelcalves/harnessing-101/internal/api"
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
-	"github.com/rafaelcalves/harnessing-101/internal/core/task"
-	"github.com/rafaelcalves/harnessing-101/internal/host"
 )
 
 func runCreate(args []string, stdout, stderr io.Writer) int {
@@ -32,8 +31,8 @@ func runCreate(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	return withCapabilities(stderr, wf, "create", func(ctx context.Context, caps host.Capabilities) int {
-		receipt, err := caps.CreateTask(ctx, domain.AgentID(*caller), task.CreateTaskRequest{
+	return withSession(stderr, wf, domain.AgentID(*caller), "create", func(ctx context.Context, session api.FrontendSession) int {
+		receipt, err := session.CreateTask(ctx, api.CreateTaskRequest{
 			RequestID:  domain.RequestID(*requestID),
 			TaskID:     domain.TaskID(*taskID),
 			Title:      *title,
@@ -70,8 +69,8 @@ func runTransition(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	return withCapabilities(stderr, wf, "transition", func(ctx context.Context, caps host.Capabilities) int {
-		receipt, err := caps.TransitionTask(ctx, domain.AgentID(*caller), task.TransitionTaskRequest{
+	return withSession(stderr, wf, domain.AgentID(*caller), "transition", func(ctx context.Context, session api.FrontendSession) int {
+		receipt, err := session.TransitionTask(ctx, api.TransitionTaskRequest{
 			RequestID:  domain.RequestID(*requestID),
 			TaskID:     domain.TaskID(*taskID),
 			FromStatus: domain.TaskStatus(*from),
@@ -111,8 +110,8 @@ func runReport(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	return withCapabilities(stderr, wf, "report", func(ctx context.Context, caps host.Capabilities) int {
-		receipt, err := caps.ReportTaskResult(ctx, domain.AgentID(*caller), task.ReportTaskResultRequest{
+	return withSession(stderr, wf, domain.AgentID(*caller), "report", func(ctx context.Context, session api.FrontendSession) int {
+		receipt, err := session.ReportTaskResult(ctx, api.ReportTaskResultRequest{
 			RequestID:            domain.RequestID(*requestID),
 			TaskID:               domain.TaskID(*taskID),
 			ResultID:             domain.ResultID(*resultID),
@@ -151,8 +150,8 @@ func runAccept(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	return withCapabilities(stderr, wf, "accept", func(ctx context.Context, caps host.Capabilities) int {
-		receipt, err := caps.AcceptTaskResult(ctx, domain.AgentID(*caller), task.AcceptTaskResultRequest{
+	return withSession(stderr, wf, domain.AgentID(*caller), "accept", func(ctx context.Context, session api.FrontendSession) int {
+		receipt, err := session.AcceptTaskResult(ctx, api.AcceptTaskResultRequest{
 			RequestID:            domain.RequestID(*requestID),
 			TaskID:               domain.TaskID(*taskID),
 			ResultID:             domain.ResultID(*resultID),
@@ -190,8 +189,8 @@ func runReject(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	return withCapabilities(stderr, wf, "reject", func(ctx context.Context, caps host.Capabilities) int {
-		receipt, err := caps.RejectTaskResult(ctx, domain.AgentID(*caller), task.RejectTaskResultRequest{
+	return withSession(stderr, wf, domain.AgentID(*caller), "reject", func(ctx context.Context, session api.FrontendSession) int {
+		receipt, err := session.RejectTaskResult(ctx, api.RejectTaskResultRequest{
 			RequestID:            domain.RequestID(*requestID),
 			TaskID:               domain.TaskID(*taskID),
 			ResultID:             domain.ResultID(*resultID),

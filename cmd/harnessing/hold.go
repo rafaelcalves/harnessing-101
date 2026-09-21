@@ -9,8 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
-	"github.com/rafaelcalves/harnessing-101/internal/host"
+	"github.com/rafaelcalves/harnessing-101/internal/api"
 )
 
 // runHold implements `harnessing hold`: opens the workspace and keeps it
@@ -37,27 +36,12 @@ func runHold(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if *wf.root == "" {
-		_, _ = fmt.Fprintln(stderr, "harnessing hold: -workspace is required")
-		return 1
-	}
-
-	caps, err := host.Open(*wf.root, domain.WorkspaceID(*wf.id), wf.reviewers)
-	if err != nil {
-		_, _ = fmt.Fprintln(stderr, "harnessing hold: "+describeError(err))
-		return 1
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	_, _ = fmt.Fprintf(stdout, "harnessing hold: workspace open, holding lock (pid %d)\n", os.Getpid())
-	<-ctx.Done()
-
-	if closeErr := caps.Close(); closeErr != nil {
-		_, _ = fmt.Fprintln(stderr, "harnessing hold: workspace did not close cleanly: "+describeError(closeErr))
-		return 1
-	}
-	_, _ = fmt.Fprintln(stdout, "harnessing hold: closed")
-	return 0
+	return withSession(stderr, wf, "", "hold", func(ctx context.Context, _ api.FrontendSession) int {
+		ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		_, _ = fmt.Fprintf(stdout, "harnessing hold: workspace open, holding lock (pid %d)\n", os.Getpid())
+		<-ctx.Done()
+		_, _ = fmt.Fprintln(stdout, "harnessing hold: closed")
+		return 0
+	})
 }

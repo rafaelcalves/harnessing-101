@@ -74,6 +74,13 @@ func TestCLI_Phase2ProductWalkthroughSubprocess(t *testing.T) {
 		if !strings.Contains(output, "Status:     "+want) {
 			t.Fatalf("task status = %q, want %s", output, want)
 		}
+		reporter := outputField(output, "  Reporter:")
+		if reporter == "" || !strings.Contains(reporter, "unverified") {
+			t.Fatalf("task status %s omitted unverified reporter: %q", want, output)
+		}
+		if outputField(output, "  Last update:") == "" {
+			t.Fatalf("task status %s omitted last update: %q", want, output)
+		}
 	}
 
 	// Create a two-agent workspace and an accountable task.

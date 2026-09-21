@@ -7,8 +7,8 @@ import (
 	"io"
 	"time"
 
+	"github.com/rafaelcalves/harnessing-101/internal/api"
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
-	"github.com/rafaelcalves/harnessing-101/internal/host"
 )
 
 // runMessage implements `harnessing message`: a read-only view of one
@@ -28,8 +28,8 @@ func runMessage(args []string, stdout, stderr io.Writer) int {
 	}
 	messageID := domain.MessageID(fs.Arg(0))
 
-	return withCapabilities(stderr, wf, "message", func(ctx context.Context, caps host.Capabilities) int {
-		message, err := caps.GetMessage(ctx, messageID)
+	return withSession(stderr, wf, "", "message", func(ctx context.Context, session api.FrontendSession) int {
+		message, err := session.GetMessage(ctx, messageID)
 		if err != nil {
 			_, _ = fmt.Fprintln(stderr, "harnessing message: "+describeError(err))
 			return 1

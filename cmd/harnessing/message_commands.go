@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/rafaelcalves/harnessing-101/internal/api"
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
-	"github.com/rafaelcalves/harnessing-101/internal/core/task"
-	"github.com/rafaelcalves/harnessing-101/internal/host"
 )
 
 // runSend implements `harnessing send`. -sender defaults to -caller when
@@ -50,8 +49,8 @@ func runSend(args []string, stdout, stderr io.Writer) int {
 		senderID = *s
 	}
 
-	return withCapabilities(stderr, wf, "send", func(ctx context.Context, caps host.Capabilities) int {
-		receipt, err := caps.SendMessage(ctx, domain.AgentID(*caller), task.SendMessageRequest{
+	return withSession(stderr, wf, domain.AgentID(*caller), "send", func(ctx context.Context, session api.FrontendSession) int {
+		receipt, err := session.SendMessage(ctx, api.SendMessageRequest{
 			RequestID:        domain.RequestID(*requestID),
 			MessageID:        domain.MessageID(*messageID),
 			SenderAgentID:    domain.AgentID(senderID),
@@ -88,8 +87,8 @@ func runAck(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	return withCapabilities(stderr, wf, "ack", func(ctx context.Context, caps host.Capabilities) int {
-		receipt, err := caps.AcknowledgeMessage(ctx, domain.AgentID(*caller), task.AcknowledgeMessageRequest{
+	return withSession(stderr, wf, domain.AgentID(*caller), "ack", func(ctx context.Context, session api.FrontendSession) int {
+		receipt, err := session.AcknowledgeMessage(ctx, api.AcknowledgeMessageRequest{
 			RequestID: domain.RequestID(*requestID),
 			MessageID: domain.MessageID(*messageID),
 		})

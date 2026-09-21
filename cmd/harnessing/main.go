@@ -1,7 +1,6 @@
-// Command harnessing is the CLI adapter. It is a thin wrapper over
-// internal/host.Capabilities: every command constructs Capabilities via
-// host.Open and calls only its exported methods. CLI flags, exit codes,
-// and rendering stay here, outside the core, per
+// Command harnessing is the CLI presentation adapter. Commands receive a
+// caller-bound api.FrontendSession from the trusted assembly root. CLI flags,
+// exit codes, and rendering stay here, outside the core, per
 // docs/architecture/boundaries.md.
 package main
 

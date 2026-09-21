@@ -31,9 +31,9 @@ allowed_ports() {
 	' "$CONFIG"
 }
 
-allowed_presentation() {
+allowed_assembly() {
 	awk -v wanted="$1" '
-		/^# H101-43 presentation role rule:/ { section=1; next }
+		/^# H101-74 composition root exception:/ { section=1; next }
 		section && $1 == wanted { found=1 }
 		END { exit(found ? 0 : 1) }
 	' "$CONFIG"
@@ -88,11 +88,11 @@ while IFS= read -r row; do
 			echo "forbidden outbound-ports import: $pkg -> $imported" >&2
 			violations=1
 		fi
-		if [[ "$imported" == "$core_task" && "$pkg" != "$host" ]] && ! allowed_presentation "$pkg"; then
+		if [[ "$imported" == "$core_task" && "$pkg" != "$host" ]] && ! allowed_assembly "$pkg"; then
 			echo "forbidden direct core-task import from presentation/package: $pkg -> $imported" >&2
 			violations=1
 		fi
-		if [[ "$imported" == "$host" ]] && ! allowed_presentation "$pkg"; then
+		if [[ "$imported" == "$host" ]] && ! allowed_assembly "$pkg"; then
 			echo "forbidden direct host import from presentation/package: $pkg -> $imported" >&2
 			violations=1
 		fi

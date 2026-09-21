@@ -37,6 +37,7 @@ import (
 	"github.com/rafaelcalves/harnessing-101/internal/adapters/clock"
 	"github.com/rafaelcalves/harnessing-101/internal/adapters/idsource"
 	"github.com/rafaelcalves/harnessing-101/internal/adapters/statestore"
+	"github.com/rafaelcalves/harnessing-101/internal/api"
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
 	"github.com/rafaelcalves/harnessing-101/internal/core/task"
 )
@@ -214,40 +215,10 @@ func (w *workspace) Subscribe(ctx context.Context, afterCursor string) (<-chan d
 	return w.engine.Subscribe(ctx, afterCursor)
 }
 
-// FrontendSession is the caller-bound surface for a user interface. It has
-// no caller ID parameter, lifecycle method, mailbox integration, or storage
-// handle. The composition owner binds the caller once and retains the
-// broader Capabilities value separately for trusted lifecycle/integration use.
-type FrontendSession interface {
-	RegisterAgent(ctx context.Context, req task.RegisterAgentRequest) (domain.Receipt, error)
-	UpdateAgent(ctx context.Context, req task.UpdateAgentRequest) (domain.Receipt, error)
-	CreateTask(ctx context.Context, req task.CreateTaskRequest) (domain.Receipt, error)
-	TransitionTask(ctx context.Context, req task.TransitionTaskRequest) (domain.Receipt, error)
-	ReportTaskResult(ctx context.Context, req task.ReportTaskResultRequest) (domain.Receipt, error)
-	AcceptTaskResult(ctx context.Context, req task.AcceptTaskResultRequest) (domain.Receipt, error)
-	RejectTaskResult(ctx context.Context, req task.RejectTaskResultRequest) (domain.Receipt, error)
-	SendMessage(ctx context.Context, req task.SendMessageRequest) (domain.Receipt, error)
-	AcknowledgeMessage(ctx context.Context, req task.AcknowledgeMessageRequest) (domain.Receipt, error)
-	GetAgent(ctx context.Context, agentID domain.AgentID) (domain.Agent, error)
-	GetTask(ctx context.Context, taskID domain.TaskID) (domain.Task, error)
-	GetMessage(ctx context.Context, messageID domain.MessageID) (domain.Message, error)
-	GetSnapshot(ctx context.Context) (domain.Snapshot, error)
-
-	// ResolveRequest confirms durability for one of THIS session's own
-	// prior requests. There is deliberately no callerAgentID parameter
-	// here — the whole point of a session (H101-64's qualification on
-	// ADR 0004's caller-binding): identity is bound once, at
-	// BindFrontendSession, by trusted composition code, never re-taken
-	// from a value the session's own caller could supply per call. A
-	// method on this interface that accepted a callerAgentID argument
-	// would let a session ask about a DIFFERENT principal's requests —
-	// exactly the mistake this binding exists to prevent.
-	ResolveRequest(ctx context.Context, requestID domain.RequestID) (domain.Receipt, error)
-
-	// Subscribe observes committed events from a cursor. Not
-	// caller-scoped, same as GetSnapshot — see Capabilities.Subscribe.
-	Subscribe(ctx context.Context, afterCursor string) (<-chan domain.Event, error)
-}
+// FrontendSession is the neutral API contract. It remains aliased here for
+// compatibility with trusted composition callers; presentation packages name
+// the api package directly and never import host.
+type FrontendSession = api.FrontendSession
 
 type frontendSession struct {
 	caps   Capabilities

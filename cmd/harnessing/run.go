@@ -23,8 +23,9 @@ Usage:
   harnessing send         -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -message <id> -recipient <id> -kind <Request|Inform|Result> -body <text> [-sender <id>] [-task <id>] [-reply-to <id>]
   harnessing ack          -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -message <id>
 
-Every command other than version opens a workspace through
-internal/host.Capabilities; there is no other path to the store. The
+Every command other than version opens a workspace through the trusted
+composition root and receives a caller-bound frontend session; there is no
+other path to the store. The
 reviewer set is supplied here, by you, on the command line — never read
 from anything already in the workspace. -caller is who is invoking the
 command; the engine, not this tool, decides what that caller may do.

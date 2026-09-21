@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/rafaelcalves/harnessing-101/internal/api"
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
-	"github.com/rafaelcalves/harnessing-101/internal/host"
 )
 
 // runMessages lists the pending handoffs visible in a workspace. It uses the
@@ -22,8 +22,8 @@ func runMessages(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	return withCapabilities(stderr, wf, "messages", func(ctx context.Context, caps host.Capabilities) int {
-		snapshot, err := caps.GetSnapshot(ctx)
+	return withSession(stderr, wf, "", "messages", func(ctx context.Context, session api.FrontendSession) int {
+		snapshot, err := session.GetSnapshot(ctx)
 		if err != nil {
 			_, _ = fmt.Fprintln(stderr, "harnessing messages: "+describeError(err))
 			return 1

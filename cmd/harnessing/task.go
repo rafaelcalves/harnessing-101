@@ -7,8 +7,8 @@ import (
 	"io"
 	"time"
 
+	"github.com/rafaelcalves/harnessing-101/internal/api"
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
-	"github.com/rafaelcalves/harnessing-101/internal/host"
 )
 
 // runTask implements `harnessing task`: a read-only view of one task,
@@ -27,8 +27,8 @@ func runTask(args []string, stdout, stderr io.Writer) int {
 	}
 	taskID := domain.TaskID(fs.Arg(0))
 
-	return withCapabilities(stderr, wf, "task", func(ctx context.Context, caps host.Capabilities) int {
-		snapshot, err := caps.GetSnapshot(ctx)
+	return withSession(stderr, wf, "", "task", func(ctx context.Context, session api.FrontendSession) int {
+		snapshot, err := session.GetSnapshot(ctx)
 		if err != nil {
 			_, _ = fmt.Fprintln(stderr, "harnessing task: "+describeError(err))
 			return 1
@@ -44,21 +44,12 @@ func runTask(args []string, stdout, stderr io.Writer) int {
 			_, _ = fmt.Fprintln(stderr, "harnessing task: "+describeError(&domain.Error{Code: domain.ErrNotFound, Detail: "task not found"}))
 			return 1
 		}
-		var result *domain.TaskResult
-		if task.CurrentResultID != nil {
-			for i := range snapshot.TaskResults {
-				if snapshot.TaskResults[i].ResultID == *task.CurrentResultID {
-					result = &snapshot.TaskResults[i]
-					break
-				}
-			}
-		}
-		printTask(stdout, *task, result)
+		printTask(stdout, *task)
 		return 0
 	})
 }
 
-func printTask(w io.Writer, t domain.Task, result *domain.TaskResult) {
+func printTask(w io.Writer, t domain.Task) {
 	_, _ = fmt.Fprintf(w, "Task %s\n", t.ID)
 	_, _ = fmt.Fprintf(w, "  Title:      %s\n", t.Title)
 	_, _ = fmt.Fprintf(w, "  Status:     %s\n", t.Status)
@@ -71,12 +62,9 @@ func printTask(w io.Writer, t domain.Task, result *domain.TaskResult) {
 	}
 	_, _ = fmt.Fprintf(w, "  Created by: %s (claimed sender, %s, %s)\n",
 		t.Provenance.ClaimedAgentID, t.Provenance.EntryMechanism, t.Provenance.IdentityVerification)
-	if result != nil {
-		_, _ = fmt.Fprintf(w, "  Reporter:   %s (claimed reporter, %s)\n", result.Provenance.ClaimedAgentID, result.Provenance.IdentityVerification)
-		_, _ = fmt.Fprintf(w, "  Last update: %s\n", result.Provenance.RecordedAt.Format(time.RFC3339Nano))
-	} else if t.Status == domain.TaskTodo {
-		_, _ = fmt.Fprintf(w, "  Reporter:   %s (claimed creator, %s)\n", t.Provenance.ClaimedAgentID, t.Provenance.IdentityVerification)
-		_, _ = fmt.Fprintf(w, "  Last update: %s\n", t.Provenance.RecordedAt.Format(time.RFC3339Nano))
+	if t.LastStatusChange != nil {
+		_, _ = fmt.Fprintf(w, "  Reporter:   %s (claimed reporter, %s)\n", t.LastStatusChange.Provenance.ClaimedAgentID, t.LastStatusChange.Provenance.IdentityVerification)
+		_, _ = fmt.Fprintf(w, "  Last update: %s\n", t.LastStatusChange.Provenance.RecordedAt.Format(time.RFC3339Nano))
 	} else {
 		_, _ = fmt.Fprintln(w, "  Reporter:   (unavailable; status-update provenance is not recorded)")
 		_, _ = fmt.Fprintln(w, "  Last update: (unavailable; status-update timestamp is not recorded)")

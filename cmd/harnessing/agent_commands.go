@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/rafaelcalves/harnessing-101/internal/api"
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
-	"github.com/rafaelcalves/harnessing-101/internal/core/task"
-	"github.com/rafaelcalves/harnessing-101/internal/host"
 )
 
 // runRegister implements `harnessing register`: Capabilities.RegisterAgent.
@@ -37,8 +36,8 @@ func runRegister(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	return withCapabilities(stderr, wf, "register", func(ctx context.Context, caps host.Capabilities) int {
-		receipt, err := caps.RegisterAgent(ctx, domain.AgentID(*caller), task.RegisterAgentRequest{
+	return withSession(stderr, wf, domain.AgentID(*caller), "register", func(ctx context.Context, session api.FrontendSession) int {
+		receipt, err := session.RegisterAgent(ctx, api.RegisterAgentRequest{
 			RequestID:   domain.RequestID(*requestID),
 			AgentID:     domain.AgentID(*agentID),
 			DisplayName: *displayName,
@@ -79,8 +78,8 @@ func runUpdate(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	return withCapabilities(stderr, wf, "update", func(ctx context.Context, caps host.Capabilities) int {
-		receipt, err := caps.UpdateAgent(ctx, domain.AgentID(*caller), task.UpdateAgentRequest{
+	return withSession(stderr, wf, domain.AgentID(*caller), "update", func(ctx context.Context, session api.FrontendSession) int {
+		receipt, err := session.UpdateAgent(ctx, api.UpdateAgentRequest{
 			RequestID:   domain.RequestID(*requestID),
 			AgentID:     domain.AgentID(*agentID),
 			DisplayName: displayName.Get(),

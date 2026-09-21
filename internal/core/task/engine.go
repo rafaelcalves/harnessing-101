@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/rafaelcalves/harnessing-101/internal/api"
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
 	"github.com/rafaelcalves/harnessing-101/internal/core/ports"
 )
@@ -108,12 +109,7 @@ func (e *Engine) currentRevision(ctx context.Context) (uint64, error) {
 // CreateTaskRequest is version 1's CreateTask payload (boundaries.md
 // "version 1 command payloads"), plus the request ID envelope field
 // every command carries.
-type CreateTaskRequest struct {
-	RequestID  domain.RequestID
-	TaskID     domain.TaskID
-	Title      string
-	AssigneeID domain.AgentID
-}
+type CreateTaskRequest = api.CreateTaskRequest
 
 func (e *Engine) CreateTask(ctx context.Context, caller CallerScope, req CreateTaskRequest) (domain.Receipt, error) {
 	if req.Title == "" {
@@ -153,13 +149,7 @@ func (e *Engine) CreateTask(ctx context.Context, caller CallerScope, req CreateT
 // Todo->Doing, Doing->Blocked, Blocked->Doing, and an authorized human's
 // Done->Todo reopen are permitted here; AwaitingReview and Done are only
 // reachable through the dedicated report/decision commands below.
-type TransitionTaskRequest struct {
-	RequestID  domain.RequestID
-	TaskID     domain.TaskID
-	FromStatus domain.TaskStatus
-	ToStatus   domain.TaskStatus
-	Reason     string
-}
+type TransitionTaskRequest = api.TransitionTaskRequest
 
 var genericTransitions = map[domain.TaskStatus]map[domain.TaskStatus]bool{
 	domain.TaskTodo:    {domain.TaskDoing: true},
@@ -218,14 +208,7 @@ func (e *Engine) TransitionTask(ctx context.Context, caller CallerScope, req Tra
 
 // ReportTaskResultRequest binds to the task revision the caller last saw,
 // per boundaries.md's completion contract.
-type ReportTaskResultRequest struct {
-	RequestID            domain.RequestID
-	TaskID               domain.TaskID
-	ResultID             domain.ResultID
-	ExpectedTaskRevision uint64
-	Summary              string
-	Artifacts            []string
-}
+type ReportTaskResultRequest = api.ReportTaskResultRequest
 
 func (e *Engine) ReportTaskResult(ctx context.Context, caller CallerScope, req ReportTaskResultRequest) (domain.Receipt, error) {
 	if req.Summary == "" {
@@ -283,21 +266,9 @@ func (e *Engine) ReportTaskResult(ctx context.Context, caller CallerScope, req R
 // AcceptTaskResultRequest and RejectTaskResultRequest bind to both the
 // task revision and the exact current result ID: either being stale is
 // Conflict, per boundaries.md's completion contract.
-type AcceptTaskResultRequest struct {
-	RequestID            domain.RequestID
-	TaskID               domain.TaskID
-	ResultID             domain.ResultID
-	ExpectedTaskRevision uint64
-	ReviewNote           string
-}
+type AcceptTaskResultRequest = api.AcceptTaskResultRequest
 
-type RejectTaskResultRequest struct {
-	RequestID            domain.RequestID
-	TaskID               domain.TaskID
-	ResultID             domain.ResultID
-	ExpectedTaskRevision uint64
-	Reason               string
-}
+type RejectTaskResultRequest = api.RejectTaskResultRequest
 
 func (e *Engine) AcceptTaskResult(ctx context.Context, caller CallerScope, req AcceptTaskResultRequest) (domain.Receipt, error) {
 	if !caller.IsHumanReviewer {
@@ -458,12 +429,7 @@ func cloneSnapshot(snap domain.Snapshot) domain.Snapshot {
 
 // RegisterAgentRequest is version 1's RegisterAgent payload (boundaries.md
 // line 24): agentID and displayName are required, profileID is optional.
-type RegisterAgentRequest struct {
-	RequestID   domain.RequestID
-	AgentID     domain.AgentID
-	DisplayName string
-	ProfileID   string
-}
+type RegisterAgentRequest = api.RegisterAgentRequest
 
 // UpdateAgentRequest is "an explicit patch of those mutable fields"
 // (boundaries.md line 24): DisplayName/ProfileID are nil-means-unchanged
@@ -471,12 +437,7 @@ type RegisterAgentRequest struct {
 // anywhere in this struct that could write a new ID onto an existing
 // Agent — the immutable field is unpatchable by construction, not by
 // convention.
-type UpdateAgentRequest struct {
-	RequestID   domain.RequestID
-	AgentID     domain.AgentID
-	DisplayName *string
-	ProfileID   *string
-}
+type UpdateAgentRequest = api.UpdateAgentRequest
 
 // canWriteAgentRecord decides RegisterAgent/UpdateAgent authorization the
 // same way for both: self (an agent registering or updating itself) or a
@@ -610,16 +571,7 @@ func findAgent(snap *domain.Snapshot, id domain.AgentID) (int, domain.Agent, boo
 // SendMessageRequest is the version 1 message command. SenderAgentID is the
 // message's claimed sender; Provenance separately records the host-scoped
 // caller and remains Unverified in this phase.
-type SendMessageRequest struct {
-	RequestID        domain.RequestID
-	MessageID        domain.MessageID
-	SenderAgentID    domain.AgentID
-	RecipientAgentID domain.AgentID
-	Kind             domain.MessageKind
-	Body             string
-	TaskID           *domain.TaskID
-	ReplyToMessageID *domain.MessageID
-}
+type SendMessageRequest = api.SendMessageRequest
 
 func (e *Engine) SendMessage(ctx context.Context, caller CallerScope, req SendMessageRequest) (domain.Receipt, error) {
 	if req.MessageID == "" || req.SenderAgentID == "" || req.RecipientAgentID == "" {
@@ -675,10 +627,7 @@ func (e *Engine) SendMessage(ctx context.Context, caller CallerScope, req SendMe
 // AcknowledgeMessageRequest records the addressed recipient's explicit
 // acknowledgement. Repeating it is a successful durable no-op with no second
 // acknowledgement event.
-type AcknowledgeMessageRequest struct {
-	RequestID domain.RequestID
-	MessageID domain.MessageID
-}
+type AcknowledgeMessageRequest = api.AcknowledgeMessageRequest
 
 func (e *Engine) AcknowledgeMessage(ctx context.Context, caller CallerScope, req AcknowledgeMessageRequest) (domain.Receipt, error) {
 	fp := fingerprint("AcknowledgeMessage", req.MessageID)
@@ -706,10 +655,7 @@ func (e *Engine) AcknowledgeMessage(ctx context.Context, caller CallerScope, req
 }
 
 // MessageDeliveryRequest identifies a delivery fact recorded by the host.
-type MessageDeliveryRequest struct {
-	RequestID domain.RequestID
-	MessageID domain.MessageID
-}
+type MessageDeliveryRequest = api.MessageDeliveryRequest
 
 // RecordMessagePublished records the mailbox adapter making a complete
 // envelope available. It is deliberately separate from queued and

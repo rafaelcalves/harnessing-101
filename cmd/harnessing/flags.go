@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/rafaelcalves/harnessing-101/internal/api"
+	"github.com/rafaelcalves/harnessing-101/internal/assembly"
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
-	"github.com/rafaelcalves/harnessing-101/internal/host"
 )
 
 // agentIDList collects a repeatable -reviewer flag into an ordered list
@@ -78,33 +79,11 @@ func addWorkspaceFlags(fs *flag.FlagSet) *workspaceFlags {
 	return wf
 }
 
-// withCapabilities opens the workspace named by wf, runs fn, and always
-// closes it before returning — on every exit path, including a failure
-// inside fn. cmdName is only used to prefix stderr messages.
-func withCapabilities(stderr io.Writer, wf *workspaceFlags, cmdName string, fn func(ctx context.Context, caps host.Capabilities) int) int {
-	if *wf.root == "" {
-		_, _ = fmt.Fprintf(stderr, "harnessing %s: -workspace is required\n", cmdName)
-		return 1
-	}
-
-	caps, err := host.Open(*wf.root, domain.WorkspaceID(*wf.id), wf.reviewers)
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "harnessing %s: %s\n", cmdName, describeError(err))
-		return 1
-	}
-	closeFailed := false
-	defer func() {
-		if closeErr := caps.Close(); closeErr != nil {
-			_, _ = fmt.Fprintf(stderr, "harnessing %s: workspace did not close cleanly: %s\n", cmdName, describeError(closeErr))
-			closeFailed = true
-		}
-	}()
-
-	code := fn(context.Background(), caps)
-	if closeFailed && code == 0 {
-		return 1
-	}
-	return code
+// withSession opens the workspace through the trusted composition root, binds
+// the caller once, runs fn with only the neutral session, and closes the
+// workspace before returning.
+func withSession(stderr io.Writer, wf *workspaceFlags, caller domain.AgentID, cmdName string, fn func(ctx context.Context, session api.FrontendSession) int) int {
+	return assembly.WithSession(stderr, *wf.root, domain.WorkspaceID(*wf.id), []domain.AgentID(wf.reviewers), caller, cmdName, fn)
 }
 
 // describeError renders a domain.Error with its stable code, so a script

@@ -20,11 +20,8 @@ github.com/rafaelcalves/harnessing-101/internal/host # sole composition root; in
 # Imports field excludes test imports, so those files do not enter the
 # production import check.
 
-# H101-43 presentation role rule:
-# production presentation packages must reach commands and queries through
-# host.FrontendSession, not by importing host or core/task directly. The
-# current CLI is the interim composition adapter: it still imports host (and
-# request records from core/task) while the adapter extraction is pending.
-# Keep this exception explicit and temporary; new presentation packages must
-# not be added here without a replacement session-only assembly boundary.
-github.com/rafaelcalves/harnessing-101/cmd/harnessing # interim CLI composition adapter; direct host/task imports are being migrated to FrontendSession.
+# H101-74 composition root exception:
+# Only the trusted assembly package may import host directly to own Open,
+# operator policy, FrontendSession binding, and Close. Presentation packages
+# import only api and passive domain.
+github.com/rafaelcalves/harnessing-101/internal/assembly # trusted CLI composition root; owns host lifecycle and binding.
