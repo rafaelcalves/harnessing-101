@@ -36,6 +36,33 @@ import (
 type StateStore interface {
 	Load(ctx context.Context, workspaceID domain.WorkspaceID) (domain.Snapshot, error)
 	Commit(ctx context.Context, workspaceID domain.WorkspaceID, req CommitRequest) (domain.Receipt, []domain.Event, error)
+
+	// ResolveRequest is ADR 0004's caller-bound resolution operation
+	// (docs/adr/0004-uncertain-command-outcomes.md, appended ruling
+	// docs/architecture/h101-25-state-store-authority.md /
+	// ADR-0004-append `267885e`: adding a method to an existing port is
+	// not a breach of "ten ports" — that property is the count and role
+	// of the ten, four inbound and six outbound, not a frozen method
+	// set). It performs no domain mutation, allocates no new request
+	// ID, and does not advance the workspace revision; it may still
+	// perform confirmation I/O. A matching receipt with confirmed
+	// durability returns Confirmed (the original receipt, unchanged);
+	// a still-failing confirmation returns OutcomeUncertain with the
+	// best observed evidence; no receipt for (callerAgentID, requestID)
+	// returns NotFound — Absent, meaning "no record found now," never
+	// "this never happened."
+	//
+	// callerAgentID here is a scoping key into a caller-partitioned
+	// ledger (receiptKey), not an identity check: ledger keying scopes
+	// a lookup, it does not authenticate the caller. Nothing in this
+	// port binds callerAgentID to a real session — that binding is
+	// internal/host's job (FrontendSession, bound once at
+	// BindFrontendSession, never re-supplied per call). A caller of
+	// this port method directly, with an arbitrary callerAgentID, gets
+	// exactly that ID's records — which is why only reviewed
+	// composition code may hold a StateStore value at all (the import
+	// allowlist), not a substitute for that review.
+	ResolveRequest(ctx context.Context, workspaceID domain.WorkspaceID, callerAgentID domain.AgentID, requestID domain.RequestID) (domain.Receipt, error)
 }
 
 // CommitRequest is one attempted mutation against a workspace.

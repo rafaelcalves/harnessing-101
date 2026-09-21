@@ -132,25 +132,66 @@ func printReceipt(stdout io.Writer, cmdName string, receipt domain.Receipt) {
 
 // printCommandError is the one error-rendering every WRITE command uses
 // (read-only `task` does not: it has no commit whose durability could be
-// uncertain). It exists because of UI-02: StateStore.Commit can return
-// IOFailure after the rename that applies a write already succeeded,
-// when only the follow-up directory fsync failed
-// (internal/adapters/statestore/file.go's writeLocked, "commit applied
-// but durability unconfirmed" — H101-12's fsync change). There is no
-// separate error code for that today (Kelly's finding, logged as H101-54
-// for Stanley's error taxonomy), so this is deliberately not a plain
-// "failed": it names the request ID and tells the caller to check rather
-// than retry, because retrying an uncertain write is exactly the harm —
-// a caller who assumes IOFailure means nothing happened and resubmits
-// may be creating a second real change, not recovering from a first one
-// that never landed.
+// uncertain).
+//
+// H101-64 closed a real propagation gap Kelly found: the store now
+// emits the stable ErrOutcomeUncertain code with structured Effect/
+// Confirmation fields (ADR 0004), but until this fix the CLI still
+// rendered the OLD generic "IOFailure, might be uncertain" line for
+// every mutating failure — the honest error reached the surface as the
+// previous generation of itself. This now branches on Code first: an
+// OutcomeUncertain error is rendered from ADR 0004's own policy table
+// (Effect × Confirmation), not from a code-name string match.
+//
+// The plain-IOFailure branch stays for exactly the case ADR 0004's
+// consequences section names: "until all producers are migrated, an
+// unclassified IOFailure from a mutating request must be presented
+// conservatively as unconfirmed." Today every producer in this repo
+// that can fail after applying a write (the fsync case) has migrated to
+// OutcomeUncertain, so this branch is defense-in-depth against a future
+// producer that has not, not a live path — but removing it would be
+// exactly the regression Kelly found, one call site early.
 func printCommandError(stderr io.Writer, cmdName, requestID string, err error) {
 	_, _ = fmt.Fprintf(stderr, "harnessing %s: %s\n", cmdName, describeError(err))
 
 	var derr *domain.Error
-	if errors.As(err, &derr) && derr.Code == domain.ErrIOFailure {
+	if !errors.As(err, &derr) {
+		return
+	}
+
+	switch derr.Code {
+	case domain.ErrOutcomeUncertain:
+		_, _ = fmt.Fprintf(stderr, "harnessing %s: %s\n", cmdName, outcomeUncertainGuidance(requestID, derr))
+	case domain.ErrIOFailure:
+		// Conservative fallback for an as-yet-unclassified producer; see
+		// the function doc comment above.
 		_, _ = fmt.Fprintf(stderr,
 			"harnessing %s: UNCERTAIN, not necessarily failed — the write may have committed even though its durability could not be confirmed. Do NOT resubmit with a new request ID. Check state first (e.g. `harnessing task`), then retry with the SAME request ID (%s) if you need to: an identical retry replays the original result if it already committed, and only proceeds as a fresh attempt if it did not.\n",
 			cmdName, requestID)
+	}
+}
+
+// outcomeUncertainGuidance implements ADR 0004's policy table directly:
+// the caller-facing message is a deterministic function of Effect and
+// Confirmation, never of Detail's free text and never invented ad hoc
+// per call site.
+func outcomeUncertainGuidance(requestID string, derr *domain.Error) string {
+	switch {
+	case derr.Effect == domain.EffectApplied && derr.Confirmation == domain.ConfirmationDurability:
+		return fmt.Sprintf(
+			"UNCERTAIN: change applied; durability unconfirmed. Do NOT resubmit with a new request ID — check state first (e.g. `harnessing task`), then retry with the SAME request ID (%s) if you still need to: it replays the original result if it already committed.",
+			requestID)
+	case derr.Effect == domain.EffectApplied && derr.Confirmation == domain.ConfirmationOutcome:
+		return fmt.Sprintf(
+			"UNCERTAIN: change applied; its outcome confirmation is unavailable. Do NOT resubmit with a new request ID — check state first, then retry with the SAME request ID (%s) if you still need to.",
+			requestID)
+	case derr.Confirmation == domain.ConfirmationOutcome:
+		return fmt.Sprintf(
+			"UNCERTAIN: outcome unknown — this command's response was lost, not necessarily its effect. Do not assume it succeeded or failed, and stop any automated follow-on that assumes confirmed success. Check state, then resolve or retry with the SAME request ID (%s), never a new one.",
+			requestID)
+	default:
+		return fmt.Sprintf(
+			"UNCERTAIN: outcome unknown for request %s. Do not assume success or failure; check state before deciding whether to retry, and if you do, retry with this SAME request ID, never a new one.",
+			requestID)
 	}
 }

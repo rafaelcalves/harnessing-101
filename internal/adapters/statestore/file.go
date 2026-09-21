@@ -63,6 +63,26 @@ type FileStore struct {
 	// is the fix, not overhead. A freshly Opened FileStore starts at
 	// zero and so re-confirms its first replay regardless: a prior
 	// process's un-synced write is not this instance's fact to assume.
+	//
+	// THE INVARIANT THIS SKIP ACTUALLY RESTS ON (H101-64, written down
+	// rather than left in one person's head, per Kelly's finding):
+	// durableRevision is only trustworthy because *every* persisted
+	// mutation to this workspace, from this process, goes through
+	// Commit — the one place that advances it, right after the fsync
+	// that earns it. If a future change adds ANY other code path that
+	// writes state.json or its receipt ledger — a second writer method,
+	// a "fast path" that skips Commit for some reason, a direct
+	// os.WriteFile from elsewhere in this package — without also
+	// updating durableRevision through the exact same fsync-then-advance
+	// sequence, this skip silently starts lying: a replay could report
+	// a revision as durable that a bypassing write never actually
+	// synced. The mutex and the flock make this store safe against
+	// *other processes and other callers*; they do not and cannot
+	// protect against *this store's own code* adding a second writer.
+	// Anyone adding a write path here must either route it through
+	// Commit or explicitly reset/advance durableRevision themselves —
+	// silence here is exactly the failure mode this field exists to
+	// prevent, reintroduced one layer up.
 	durableRevision uint64
 }
 

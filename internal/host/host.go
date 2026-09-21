@@ -72,6 +72,18 @@ type Capabilities interface {
 	GetAgent(ctx context.Context, agentID domain.AgentID) (domain.Agent, error)
 	GetSnapshot(ctx context.Context) (domain.Snapshot, error)
 
+	// ResolveRequest is ADR 0004's caller-bound resolution operation
+	// (H101-64): confirms durability for a previously submitted request
+	// rather than trusting an earlier cached receipt at face value. It
+	// mutates nothing and does not advance the workspace revision.
+	// callerAgentID scopes which receipts are reachable the same way
+	// every other Capabilities method's callerAgentID does — it is not
+	// an identity check, and this method still relies on trusted
+	// assembly code to have bound it to a real caller before this value
+	// reaches untrusted code. FrontendSession's ResolveRequest below is
+	// the session-bound version for a UI adapter to actually hold.
+	ResolveRequest(ctx context.Context, callerAgentID domain.AgentID, requestID domain.RequestID) (domain.Receipt, error)
+
 	// Close releases the workspace lock. It does not delete state.
 	Close() error
 }
@@ -184,6 +196,10 @@ func (w *workspace) GetSnapshot(ctx context.Context) (domain.Snapshot, error) {
 	return w.engine.GetSnapshot(ctx)
 }
 
+func (w *workspace) ResolveRequest(ctx context.Context, callerAgentID domain.AgentID, requestID domain.RequestID) (domain.Receipt, error) {
+	return w.engine.ResolveRequest(ctx, callerAgentID, requestID)
+}
+
 // FrontendSession is the caller-bound surface for a user interface. It has
 // no caller ID parameter, lifecycle method, mailbox integration, or storage
 // handle. The composition owner binds the caller once and retains the
@@ -202,6 +218,17 @@ type FrontendSession interface {
 	GetTask(ctx context.Context, taskID domain.TaskID) (domain.Task, error)
 	GetMessage(ctx context.Context, messageID domain.MessageID) (domain.Message, error)
 	GetSnapshot(ctx context.Context) (domain.Snapshot, error)
+
+	// ResolveRequest confirms durability for one of THIS session's own
+	// prior requests. There is deliberately no callerAgentID parameter
+	// here — the whole point of a session (H101-64's qualification on
+	// ADR 0004's caller-binding): identity is bound once, at
+	// BindFrontendSession, by trusted composition code, never re-taken
+	// from a value the session's own caller could supply per call. A
+	// method on this interface that accepted a callerAgentID argument
+	// would let a session ask about a DIFFERENT principal's requests —
+	// exactly the mistake this binding exists to prevent.
+	ResolveRequest(ctx context.Context, requestID domain.RequestID) (domain.Receipt, error)
 }
 
 type frontendSession struct {
@@ -255,6 +282,9 @@ func (s *frontendSession) GetMessage(ctx context.Context, id domain.MessageID) (
 }
 func (s *frontendSession) GetSnapshot(ctx context.Context) (domain.Snapshot, error) {
 	return s.caps.GetSnapshot(ctx)
+}
+func (s *frontendSession) ResolveRequest(ctx context.Context, requestID domain.RequestID) (domain.Receipt, error) {
+	return s.caps.ResolveRequest(ctx, s.caller, requestID)
 }
 
 func (w *workspace) Close() error {

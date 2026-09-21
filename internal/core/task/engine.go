@@ -496,6 +496,23 @@ func (e *Engine) GetAgent(ctx context.Context, agentID domain.AgentID) (domain.A
 	return agent, nil
 }
 
+// ResolveRequest is ADR 0004's caller-bound resolution operation,
+// promoted from the store onto the engine (H101-64): it looks up a
+// previously submitted command by (callerAgentID, requestID), performs
+// no mutation, allocates no new request ID, and does not advance the
+// workspace revision. It takes a plain domain.AgentID rather than a full
+// CallerScope on purpose — this is not an authority decision (no
+// IsHumanReviewer check applies to reading your own receipt), so it
+// does not carry a field this operation has no use for. callerAgentID
+// scopes which receipts are reachable; it is not, by itself, proof of
+// who is asking — see ports.StateStore.ResolveRequest's doc comment.
+// Absent (no receipt found now) and "never applied" are different
+// claims; this returns NotFound for the former and never asserts the
+// latter.
+func (e *Engine) ResolveRequest(ctx context.Context, callerAgentID domain.AgentID, requestID domain.RequestID) (domain.Receipt, error) {
+	return e.store.ResolveRequest(ctx, e.workspaceID, callerAgentID, requestID)
+}
+
 func findAgent(snap *domain.Snapshot, id domain.AgentID) (int, domain.Agent, bool) {
 	for i, a := range snap.Agents {
 		if a.ID == id {
