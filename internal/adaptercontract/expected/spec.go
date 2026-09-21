@@ -16,10 +16,16 @@ const (
 	ReviewerID  = "reviewer1"
 	EngineerID  = "engineer"
 	AnalystID   = "analyst"
-	TaskID      = "t1"
-	MessageID   = "m1"
-	ResultID1   = "res1"
-	ResultID2   = "res2"
+	// ClaimedSenderID is UI-04's message-cycle third identity (H101-119):
+	// registered separately from the caller (EngineerID) and the
+	// recipient (AnalystID) so a submitted SenderAgentID that differs
+	// from the caller has an independently expected, named value to
+	// compare against, rather than a bare literal at each call site.
+	ClaimedSenderID = "claimed-engineer"
+	TaskID          = "t1"
+	MessageID       = "m1"
+	ResultID1       = "res1"
+	ResultID2       = "res2"
 )
 
 // Reviewers returns the human-review authority set for contract workspaces.

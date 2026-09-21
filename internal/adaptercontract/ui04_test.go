@@ -20,6 +20,33 @@ func TestUI04_FullCycleDomainOutcomes(t *testing.T) {
 			snap := harnessSnapshot(t, env)
 			assertUI04EndState(t, snap)
 
+			// H101-119 (Stanley): assert the three message identities as
+			// distinct VALUES, not just that the send succeeded. Canonical
+			// read first (works for either adapter), then this driver's
+			// own read surface so both adapters are checked, not just the
+			// shared harness path.
+			canonicalMsg := findMessageInSnapshot(snap, domain.MessageID(expected.MessageID))
+			if canonicalMsg == nil {
+				t.Fatal("message m1 missing from canonical snapshot")
+			}
+			assertMessageIdentitySeparate(t, *canonicalMsg, domain.AgentID(expected.ClaimedSenderID), domain.AgentID(expected.EngineerID), domain.AgentID(expected.AnalystID))
+			switch driver.Name() {
+			case "cli":
+				cli := driver.(*cliDriver)
+				detail := queryCLIMessage(ctx, cli, env, expected.MessageID)
+				if detail.ExitCode != 0 {
+					t.Fatalf("message query failed: %q", detail.Stderr)
+				}
+				assertCLIMessageIdentity(t, detail.Stdout, domain.AgentID(expected.ClaimedSenderID), domain.AgentID(expected.EngineerID), domain.AgentID(expected.AnalystID))
+			case "throwaway":
+				td := driver.(*throwawayDriver)
+				msg, result := throwawayMessage(t, ctx, td, env, domain.AgentID(expected.AnalystID), domain.MessageID(expected.MessageID))
+				if result.ExitCode != 0 {
+					t.Fatalf("message query failed: %q", result.Stderr)
+				}
+				assertMessageIdentitySeparate(t, msg, domain.AgentID(expected.ClaimedSenderID), domain.AgentID(expected.EngineerID), domain.AgentID(expected.AnalystID))
+			}
+
 			// AwaitingReview must not be presented as Done mid-cycle.
 			mid := newEnv(t)
 			runUI04CycleUntilAwaitingReview(t, ctx, driver, mid)
@@ -161,7 +188,7 @@ func sendMessage(t *testing.T, ctx context.Context, driver Driver, env Workspace
 		// it as a third agent rather than reuse an already-registered
 		// one, which would collapse sender into caller/recipient and
 		// erase the independence proof.
-		registerAgent(t, ctx, driver, env, "claimed-engineer", requestID+"-register-claimed-sender", "Claimed Engineer")
+		registerAgent(t, ctx, driver, env, expected.ClaimedSenderID, requestID+"-register-claimed-sender", "Claimed Engineer")
 		result = driver.Invoke(ctx, env, Call{
 			Caller: domain.AgentID(expected.EngineerID),
 			CLIArgs: []string{
@@ -172,19 +199,19 @@ func sendMessage(t *testing.T, ctx context.Context, driver Driver, env Workspace
 				"-recipient", recipient,
 				"-kind", "Request",
 				"-body", body,
-				"-sender", "claimed-engineer",
+				"-sender", expected.ClaimedSenderID,
 				"-task", taskID,
 			},
 		})
 	case "throwaway":
 		// Cross-adapter parity per H101-111: throwaway's claimed sender
-		// now matches the CLI path's ("claimed-engineer") instead of
-		// equaling -caller, so both adapters exercise the same
+		// now matches the CLI path's (expected.ClaimedSenderID) instead
+		// of equaling -caller, so both adapters exercise the same
 		// independent-claim property, not just the CLI one.
-		registerAgent(t, ctx, driver, env, "claimed-engineer", requestID+"-register-claimed-sender", "Claimed Engineer")
+		registerAgent(t, ctx, driver, env, expected.ClaimedSenderID, requestID+"-register-claimed-sender", "Claimed Engineer")
 		payload, _ := json.Marshal(map[string]interface{}{
 			"RequestID": requestID, "MessageID": messageID,
-			"SenderAgentID": "claimed-engineer", "RecipientAgentID": recipient,
+			"SenderAgentID": expected.ClaimedSenderID, "RecipientAgentID": recipient,
 			"Kind": "Request", "Body": body, "TaskID": taskID,
 		})
 		result = driver.Invoke(ctx, env, Call{

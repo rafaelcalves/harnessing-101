@@ -4,7 +4,7 @@ Harnessing 101 is an early-stage, local-first tool for coordinating AI agent wor
 
 ## Current disclosure
 
-**Harnessing 101 runs completely locally and makes no external connections itself; agents you configure may send content they can access to external services, and Harnessing 101 does not confine those agents or guarantee that your data stays on this machine.**
+**Agents you configure may send data they can access to external services. Harnessing 101 itself does not confine those agents or guarantee that your data stays on this machine; it runs locally and makes no external connections of its own.**
 
 **The product itself does not yet start, observe, or restrict agents; you start agents by hand in the current phases, and content received from another agent is unverified.**
 

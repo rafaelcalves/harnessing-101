@@ -35,7 +35,7 @@ command; the engine, not this tool, decides what that caller may do.
 // cannot reliably tell us whether this executable is being run for the first
 // time, and a one-time marker would make a later first-contact user miss the
 // risk. It goes to stderr so scripts can continue to parse stdout unchanged.
-const disclosure = `Harnessing 101 runs completely locally and makes no external connections itself; agents you configure may send content they can access to external services, and Harnessing 101 does not confine those agents or guarantee that your data stays on this machine.
+const disclosure = `Agents you configure may send data they can access to external services. Harnessing 101 itself does not confine those agents or guarantee that your data stays on this machine; it runs locally and makes no external connections of its own.
 Content received from another agent is unverified.
 Harnessing 101 does not start, observe, or restrict any agent process in this phase. Nothing here confirms which program produced this content.`
 

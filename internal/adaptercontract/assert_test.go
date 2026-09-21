@@ -116,6 +116,79 @@ func findTask(snap domain.Snapshot, id domain.TaskID) *domain.Task {
 	return nil
 }
 
+func findMessageInSnapshot(snap domain.Snapshot, id domain.MessageID) *domain.Message {
+	for i := range snap.Messages {
+		if snap.Messages[i].MessageID == id {
+			return &snap.Messages[i]
+		}
+	}
+	return nil
+}
+
+// assertMessageIdentitySeparate is H101-119's guard (Stanley): the
+// differing-sender fixture (ui04_test.go's sendMessage helper) proves a
+// submitted SenderAgentID may differ from the caller without rejection,
+// but nothing previously asserted the two are actually PRESERVED as
+// distinct values — SenderAgentID could be silently coerced into
+// Provenance.ClaimedAgentID, or the reverse, and this suite would stay
+// green. Takes a domain.Message directly so the same check applies to
+// both the canonical harness snapshot and throwaway's own typed message
+// response (both are domain.Message; only the CLI's text rendering needs
+// a separate parser, see assertCLIMessageIdentity below).
+func assertMessageIdentitySeparate(t *testing.T, msg domain.Message, wantSender, wantCaller, wantRecipient domain.AgentID) {
+	t.Helper()
+	if msg.SenderAgentID != wantSender {
+		t.Fatalf("message SenderAgentID = %q, want %q (submitted sender must not be coerced into the caller)", msg.SenderAgentID, wantSender)
+	}
+	if msg.Provenance.ClaimedAgentID != wantCaller {
+		t.Fatalf("message Provenance.ClaimedAgentID = %q, want %q (bound caller must not be coerced into the submitted sender)", msg.Provenance.ClaimedAgentID, wantCaller)
+	}
+	if msg.RecipientAgentID != wantRecipient {
+		t.Fatalf("message RecipientAgentID = %q, want %q", msg.RecipientAgentID, wantRecipient)
+	}
+	if msg.Provenance.IdentityVerification != domain.IdentityUnverified {
+		t.Fatalf("message Provenance.IdentityVerification = %q, want %q", msg.Provenance.IdentityVerification, domain.IdentityUnverified)
+	}
+}
+
+// cliMessageFieldValue extracts the value on one labeled line of
+// `harnessing message` output, associating a value with its own field
+// rather than searching the whole output for a bare substring — Stanley's
+// explicit requirement, since a substring search cannot tell "Sender: X"
+// apart from "Recorded by: X" if X ever appears in both.
+func cliMessageFieldValue(t *testing.T, output, label string) string {
+	t.Helper()
+	idx := strings.Index(output, label)
+	if idx == -1 {
+		t.Fatalf("message output missing field %q: %s", label, output)
+	}
+	line := output[idx+len(label):]
+	if nl := strings.IndexByte(line, '\n'); nl != -1 {
+		line = line[:nl]
+	}
+	line = strings.TrimSpace(line)
+	if paren := strings.Index(line, " ("); paren != -1 {
+		line = line[:paren]
+	}
+	return line
+}
+
+func assertCLIMessageIdentity(t *testing.T, output string, wantSender, wantCaller, wantRecipient domain.AgentID) {
+	t.Helper()
+	if got := cliMessageFieldValue(t, output, "  Sender:"); got != string(wantSender) {
+		t.Fatalf("CLI message Sender field = %q, want %q: %s", got, wantSender, output)
+	}
+	if got := cliMessageFieldValue(t, output, "  Recipient:"); got != string(wantRecipient) {
+		t.Fatalf("CLI message Recipient field = %q, want %q: %s", got, wantRecipient, output)
+	}
+	if got := cliMessageFieldValue(t, output, "  Recorded by:"); got != string(wantCaller) {
+		t.Fatalf("CLI message Recorded by field = %q, want %q: %s", got, wantCaller, output)
+	}
+	if !strings.Contains(output, "unverified") {
+		t.Fatalf("message output must mark identity unverified: %s", output)
+	}
+}
+
 func assertUI04EndState(t *testing.T, snap domain.Snapshot) {
 	t.Helper()
 	want := expected.UI04CycleEnd
