@@ -70,3 +70,7 @@ The core (`internal/core/...`) never imports an adapter. See
 
 `.github/workflows/ci.yml` runs build, test, vet, and lint on every pull
 request and on push to `main`. It is a required check before merge.
+
+## Troubleshooting
+
+If a workspace will not open, follow [Workspace lock troubleshooting](TROUBLESHOOTING.md). Do not delete a workspace `.lock` file based on its age.

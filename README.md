@@ -8,6 +8,20 @@ Harnessing 101 is an early-stage, local-first tool for coordinating AI agent wor
 
 **The product itself does not yet start, observe, or restrict agents; you start agents by hand in the current phases, and content received from another agent is unverified.**
 
+If a workspace will not open, follow [Workspace lock troubleshooting](docs/TROUBLESHOOTING.md) before changing or deleting any file.
+
+## Understanding command receipts
+
+A successful command prints a receipt such as:
+
+```text
+harnessing create: OK (request req-123, workspace revision 7)
+```
+
+Workspace revision identifies a recorded version of your workspace; it advances when commands or background delivery record changes, so it is not a count of your commands.
+
+See [Receipt revision troubleshooting](docs/TROUBLESHOOTING.md#a-receipt-shows-an-older-workspace-revision) if a receipt's revision is lower than the workspace's current revision.
+
 ## Build and test
 
 Install Go 1.27.1 or later, then run from the repository root:
@@ -32,6 +46,7 @@ The project plan and architecture decisions are the source of truth for current 
 - [Manual agent exposure decision](docs/adr/0002-manual-agent-exposure-in-phases-1-2.md)
 - [Architecture boundaries](docs/architecture/boundaries.md)
 - [Threat model](docs/security/threat-model.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Security policy](SECURITY.md)
 
 These documents may change as phases are reviewed. Follow them rather than relying on summaries copied elsewhere.
