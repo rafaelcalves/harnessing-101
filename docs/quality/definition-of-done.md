@@ -1160,3 +1160,93 @@ Item 1's anchor says *subprocess, not in-process `host` import from the test pac
 This is the third exit-proof gap (after reassignment, after long-running invocation). **H101-58 must land before item 1 discharges** if the §2 walkthrough includes handoff visibility. Item 2's handoff-survival claim should likewise move to CLI-visible evidence when H101-58 lands.
 
 **No change to H101-57's other four answers** (UI-06 cursor, IOFailure render, `-sender`, no auto-retry).
+
+---
+
+## H101-60 — `f242b2b` formal ruling and H101-58 (2026-09-19)
+
+**Context:** H101-57 (`b644535`) skipped `f242b2b` as uncommitted due to delivery timing; amendment `2026-09-19T10-03-30-865Z-26fa6f` covered it. This card makes the ruling explicit for the record.
+
+### `f242b2b` — verdict
+
+**ACCEPTED WITH FOLLOW-UP** (unchanged from amendment). Re-ran `TestRun_Phase2CycleRecoversAfterKilledCLI` — pass.
+
+### Which parts of item 2 does `f242b2b` move?
+
+Beyond the killed-`hold` fixture already credited in `3659e6a` / `hold_test.go`:
+
+| Item 2 part | Moved by `f242b2b`? | Evidence |
+| --- | --- | --- |
+| Lock released after real CLI process death | **Yes** (extends `hold_test`) | Subprocess `hold` + `SIGKILL`; not empty-workspace fixture |
+| **Busy while holder alive** (negative control) | **Yes** — new | Second open fails `Busy` during live `hold` |
+| Durable **task + result** after crash-reopen | **Yes on linux/amd64** | `harnessing task` shows `AwaitingReview` + `res1` |
+| Durable **acknowledged handoff** after crash-reopen | **Partial** | Proven via `host.GetSnapshot` only — not through CLI |
+| Full item-1-scale cycle before crash | **No** | Missing blocker, reject, ≥2 agents |
+| **darwin/arm64** native discharge | **No** | CI is ubuntu; manifest or macOS runner still required |
+| **Windows** | **N/A** | Skips when `Unsupported` |
+
+**Item 2 stays PARTIALLY SATISFIED.** `f242b2b` is the meaningful product-state crash-reopen proof on linux; it does not complete item 2.
+
+### H101-58 — can item 1 discharge without a message query?
+
+**No. H101-58 is exit-blocking for item 1.**
+
+`definition.md` §2 requires the user to **inspect pending messages** and **see whether a message was recorded or acknowledged** (line 19). Item 1 anchors to that walkthrough. A step performed through `ack` but verified only via `host.GetSnapshot` in a test is **not** a product walkthrough — it is composition proof smuggled in through the test harness.
+
+| | Ruling |
+| --- | --- |
+| Exit-blocking? | **Yes** for item 1 |
+| Convenience? | **No** — §2 names acknowledgement visibility as minimum useful product |
+| Item 2 impact | Handoff **survival after crash** can be credited partially without H101-58 (task/result via `task` command); handoff **visibility** in walkthrough cannot |
+| H101-59 | Real `exec.Command` walkthrough must include CLI-visible ack check once H101-58 lands |
+
+Claudio walking §2 under H101-59 will hit this wall on the handoff step — expected, not a surprise failure.
+
+---
+
+## H101-63 / H101-56 acceptance review (2026-09-21)
+
+Reviewed commit `45cc821` (replay durability + `OutcomeUncertain` taxonomy). Re-ran `go test -count=1 ./internal/adapters/statestore/ -run 'Uncertain|Resolve'` — three new tests pass.
+
+**Verdict: ACCEPTED WITH FOLLOW-UP**
+
+### Phase 2 exit item deltas
+
+**Nothing discharges directly** — this is store correctness, not a walkthrough or adapter-contract deliverable. **UI-02 assertability improves** at the domain/store layer (see below).
+
+### `durableRevision` assumption — sceptical read
+
+**Holds for every path in this commit.** Kevin's reasoning is sound under the project's stated invariants:
+
+| Question | Finding |
+| --- | --- |
+| Sole writer under `mu` + flock? | **Yes.** All `state.json` writes go through `writeLocked` inside `Commit` while `mu` is held. Second `Open` in the same process fails `Busy` at flock — no second writer instance. |
+| Writes outside `Commit`? | **None** in production code. Lock-file PID text is diagnostic (`WriteAt`, never read for correctness). Manual file tampering is corrupt-read / `IOFailure`, not a silent un-sync. |
+| Can a confirmed revision be invalidated later in-process? | **Not today.** `durableRevision` only increases on successful directory fsync after apply or `confirmDurable`. No code path truncates or rewrites state without going through the same barrier logic. |
+| Fresh `Open` starts at zero? | **Correct.** Prior process's unconfirmed fsync is not this instance's assumption to make. |
+
+**Residual risk (documented, not a reject):** a **future** code path that writes `state.json` without updating `durableRevision` would break the optimization — same class of bug as bypassing `Commit`. The struct comment states the invariant; code review must preserve it.
+
+### UI-02 / H101-53 — can contract stop asserting on detail substring?
+
+**Yes, for `OutcomeUncertain` at the store layer.** Tests assert `Code`, `Effect`, `Confirmation`, `RequestID`, `WorkspaceID`, `ObservedRevision` — and deliberately mutate `Detail` to prove independence.
+
+**Follow-up (not blocking this card):** CLI `printCommandError` still keys the UNCERTAIN second line off `IOFailure`, not `OutcomeUncertain` (`flags.go`). Host/engine must propagate the new code before adapter-contract UI-02 assertions cover the full CLI path. Update H101-53 contract table when that lands.
+
+### `ResolveRequest` — `NotFound` for cross-caller vs Absent
+
+**Sound.** ADR 0004 requires authorization before lookup; another principal's receipt must not be exposed. Mapping both **absent** and **not yours** to `NotFound` is deliberate data minimization — same pattern as not leaking existence. A caller who owns the request uses their own `callerAgentID`; they never need to distinguish "wrong principal" from "no record" at the store layer.
+
+**Does not lose a required caller distinction** for the designed API: wrong-principal **commands** still return `Denied` at the engine; this is only the **resolution lookup** surface.
+
+### `Unknown` + `Outcome` — ADR prose only
+
+**Domain fields already exist** (`EffectUnknown`, `ConfirmationOutcome`). When a producer implements lost-response uncertainty, contract assertions should use those fields — **not** detail substrings.
+
+**Strengthens H101-62 / Stanley's case:** item 3 UI-02 should require `Effect`/`Confirmation` assertions for the transport boundary case once implemented. Not required to accept H101-56; flag for taxonomy follow-up.
+
+### Follow-up (non-blocking)
+
+- Propagate `OutcomeUncertain` through host → CLI; retire IOFailure-based UNCERTAIN rendering when migrated.
+- Put `ResolveRequest` on the port when Stanley rules (already deferred).
+- Engine/host migration tests per ADR 0004 consequences section.
