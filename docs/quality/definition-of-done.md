@@ -2037,6 +2037,25 @@ Full ruling: [`h101-105-macos-runner-ruling.md`](h101-105-macos-runner-ruling.md
 | --- | --- |
 | 1 | **Partially satisfied** — linux + darwin CI runner green (`35598625946`); manifest retained as historical |
 | 2 | **Partially satisfied** — darwin native crash+lock in CI; cross-target ack gap (H101-104) open |
-| 3 | **Satisfied** — UI-01..08 on both adapters; crossover; `go test ./internal/adaptercontract/` green |
+| 3 | **Satisfied with limit** — see H101-107; Stanley `c77783f` G1–G7 dispositioned; G5 carded |
 | 4–8 | Unchanged |
 | 9 | **N/A** |
+
+---
+
+## H101-107 — Phase 2 item 3 ruling (2026-09-21)
+
+Full ruling: [`h101-107-phase2-item3-ruling.md`](h101-107-phase2-item3-ruling.md).
+
+**Verdict: SATISFIED WITH LIMIT** — suite structurally complete, green on both adapters
+in CI (`e565b82`), cites Stanley H101-91 stage 2 (`docs/architecture/h101-91-stage2-expectation-traceability.md`, `c77783f`).
+
+| Gap | Disposition |
+| --- | --- |
+| G1 rendering as canonical state | **(c)** CLI-local limit |
+| G2 event subject cardinality | **(c)** fixture subject presence only |
+| G3 cursor encoding / restart expiry | **(c)** named H101-70 scenario only |
+| G4 strict revision growth | **(c)** ordering guard, not dedup proof |
+| G5 unregistered assignee in harness | **(b)** carded — fix before harness paths credit registry |
+| G6 detail / precedence | **(c)** Unsupported availability only |
+| G7 task-revision preconditions | **(c)** workspace cut, not task-revision arithmetic |
