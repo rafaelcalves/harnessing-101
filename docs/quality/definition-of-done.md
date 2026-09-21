@@ -72,7 +72,7 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 | 4 | Containment preserved | **Satisfied** — store half (`24a2022`); presentation imports `api` only; `internal/assembly` sole `host` importer (`9a6b464`) |
 | 5 | Mailbox adapter (H101-22) | **No** — needs file mailbox wired to delivery-fact recorders |
 | 6 | First-run disclosure (H101-16) | **Satisfied** — every invocation, stderr, ADR 0002 sentence, CI tests (`1eda92b`) |
-| 7 | Phase 3 ops `Unsupported` | **No** — needs Capabilities/CLI surface and explicit `Unsupported` assertions |
+| 7 | Phase 3 ops `Unsupported` | **Satisfied** — `StartRun`/`StopRun`/`SetRunBudget` on `api.FrontendSession` return `Unsupported`; named test per op (`20e0caa`); no CLI subcommands (allowed) |
 | 8 | Zero network (CLI tree) | **Satisfied** — `go list -deps ./cmd/harnessing` finds no `net`/`net/http` (`24a2022`) |
 | 9 | Test layering | **N/A** — policy; enforced by review |
 
@@ -971,7 +971,7 @@ Both adapters run the **same** `internal/adaptercontract` scenarios through **re
 | **UI-05** | Provenance fields visible; four message delivery facts including **absent** facts; ADR 0002 disclosure present; no validation badges on manual content. | **Partially** — disclosure on every run (`1eda92b`); delivery facts + provenance rendering need mailbox + write path |
 | **UI-06** | **No injected entity IDs** for first overview: discover fixture via `GetSnapshot`, then observe from returned cursor through concurrent change (other adapter or helper). **`CursorExpired` → reload** — must include **host restart with stale cursor** (empty replay floor), not only buffer eviction. **Commit/publication ordering** — must include **concurrent commits where R+1 can publish before R** (goroutine interleaving within single writer), not only publish-vs-subscribe race. Deduplicate replays; snapshot refresh not presented as full event history. Detachment/mutation probe per ADR §detachment proof. Two sessions on same host (ADR H101-70 — durable cross-process log not required). | **No** — implementation gaps per H101-70 (`2e72fd7`); suite not built |
 | **UI-07** | Detach/replace UI does not close other session or cancel work. **Graceful** reopen retains records + request-id replay. | **No** — needs session detach + multi-session test |
-| **UI-08** | Returned view values detached (mutation probe on nested data does not persist). Unsupported ops → consistent `Unsupported`. Run output stream separate from domain events (fake stream tests excluded from item 3 verdict). | **No** — needs snapshot detachment tests + Phase 3 `Unsupported` surface |
+| **UI-08** | Returned view values detached (mutation probe on nested data does not persist). **Phase 3 ops on `FrontendSession`:** `StartRun`, `StopRun`, `SetRunBudget` each return stable `Unsupported` with non-empty detail (H101-80). Run output stream separate from domain events (fake stream tests excluded from item 3 verdict). | **Partially** — Phase 3 `Unsupported` surface on session (`20e0caa`); detachment probe still needed |
 
 **Cross-cutting (all scenarios):** throwaway adapter does not import CLI or share dispatch; crossover scenario (A writes, B continues) on **shared** workspace; concurrent observer sees external commits; `adaptercontract` imports only allowed packages.
 
@@ -1691,5 +1691,74 @@ Do not report item 1 discharged flat across darwin/arm64 until native manifest o
 | 5 | **Not satisfied** — mailbox H101-22 |
 | 6 | **Satisfied** |
 | 7 | **Not satisfied** |
+| 8 | **Satisfied** |
+| 9 | **N/A** |
+
+---
+
+## H101-55 reaffirmation (2026-09-21, prerequisite to H101-81)
+
+**Unchanged.** Darwin/arm64 native manifest still not recorded. No impact on item 7.
+
+---
+
+## H101-81 / H101-80 acceptance review (2026-09-21)
+
+Reviewed commit `20e0caa` (Phase 3 ops on `api.FrontendSession`). Re-ran `TestFrontendSession_Phase3OperationsAreUnsupported` — pass (named subtest per operation).
+
+**Verdict: ACCEPTED**
+
+### Item 7 — discharged?
+
+**Yes. Item 7 is SATISFIED.**
+
+| Item 7 requirement | Status |
+| --- | --- |
+| `StartRun`, `StopRun`, `SetRunBudget` named in source | **Yes** — `boundaries.md` line 19 command inventory |
+| Return stable `Unsupported`, not panic/silent success | **Yes** — `domain.ErrUnsupported` + detail naming operation and Phase 2 |
+| CI assertion | **Yes** — `TestFrontendSession_Phase3OperationsAreUnsupported` (one subtest per operation) |
+| CLI subcommands | **Not registered** — allowed per item 7: *"If Phase 2 ships without registering those subcommands, CI asserts they are unreachable as success paths"* |
+
+### `boundaries.md` completeness claim
+
+**Confirmed for the command inventory.** `boundaries.md` line 19 lists exactly three Phase 3 **Execute** commands: `StartRun`, `StopRun`, `SetRunBudget`. Run-output and process-control **surfaces** (states, events, `GetRun`, streams) are descriptive/query/event paths — not separate Phase 3 commands Claudio omitted. Claudio's cold read is accurate.
+
+### Item 3 scope — did it enlarge?
+
+**Yes, concretely — but correctly, not newly invented.**
+
+| | Before H101-80 | After H101-80 |
+| --- | --- | --- |
+| UI-08 / item 7 obligation | Phase 3 ops must return consistent `Unsupported` | Same — now **three named methods** on `FrontendSession` |
+| Adaptercontract suite | Must assert UI-08 | Must call **`StartRun`, `StopRun`, `SetRunBudget`** and assert `Unsupported` on **both** adapters |
+| Throwaway adapter | Implements `FrontendSession` | Must include three stubs (or delegate to host binding) |
+
+**This is item 3 getting more correct, not bigger by accident.** ADR 0003 UI-08 already required advertising unsupported operations consistently. H101-80 makes the contract surface explicit so the suite cannot pass while leaving Phase 3 behaviour undefined.
+
+**Dispatch guidance:** include a **UI-08 Phase 3 subsection** in `adaptercontract` with all three operations named — same principle as H101-70's named restart/interleaving scenarios.
+
+Item 3 overall: **still NOT SATISFIED** (suite + second adapter outstanding). Scope for the suite card is now **+3 named assertions**, not a new exit item.
+
+### Claudio's `api` change — architect routing needed?
+
+**No.** Putting Phase 3 stubs on `api.FrontendSession` is within engineer authority:
+
+- `boundaries.md` already names the three commands
+- Presentation depends on neutral `api`; host owns Phase 2 disposition
+- Stanley's role split permits adding methods to the presentation port when boundaries names them
+
+Not a stealth architecture change — implementation of an existing boundary. **No Stanley reroute required.**
+
+### Nine exit items — owner-ready standing (2026-09-21, post-H101-80)
+
+| # | Standing |
+| --- | --- |
+| 1 | **Partially satisfied** — linux/amd64 yes; darwin pending |
+| 2 | **Partially satisfied** |
+| 3 | **Not satisfied** — suite must add UI-08 Phase 3 named assertions; second adapter needed |
+| 4 | **Satisfied** |
+| 5 | **Not satisfied** |
+| 6 | **Satisfied** |
+| 7 | **Satisfied** |
 | 8 | **Satisfied** |
 | 9 | **N/A** |
