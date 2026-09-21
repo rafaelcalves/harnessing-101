@@ -73,3 +73,20 @@ Status: **Proposed for review**, 2026-09-19. Author: Stanley, Architect. Card: H
 | Resolve remains uncertain, fails, or returns an unfamiliar combination | Preserve uncertainty and stop automatic follow-on work; never infer rollback or permission to repeat. |
 
 **INFERENCE — verification scope.** Tests should vary Detail while holding code/enums fixed and assert unchanged client behavior, including Unknown/Outcome. No code was changed for this clarification. If a future protocol needs server-directed recovery negotiation, revisit an action field then; it would still require policy validation rather than blind execution.
+
+## H101-99 — optional derived uncertainty flag (2026-09-21)
+
+**RULING: keep `Uncertain` with a defined derivation.** An adapter may expose this convenience boolean on its own error envelope. Its meaning belongs to this shared ADR, not to independent adapter policy. It summarizes that the response requires conservative uncertain-outcome handling; it is not a second outcome classification or a replacement for Code, Effect, Confirmation, request identity, or the recovery rules above.
+
+For the current vocabulary, derive it when constructing the error response:
+
+```text
+Uncertain = (Code == OutcomeUncertain)
+         OR (Code == IOFailure AND failed operation is a mutating command)
+```
+
+Use the canonical operation's semantics, not an arbitrary user claim that an operation is mutating. This includes an unclassified mutation failure normalized to IOFailure. The second branch is the existing conservative fallback, not evidence of Applied; read-only IOFailure does not satisfy it. OutcomeUncertain satisfies it even when returned by ResolveRequest, which does not execute a new mutation. Do not derive the flag from Detail, an observed revision, or a particular pair of enum values: unfamiliar combinations under OutcomeUncertain must remain uncertain.
+
+The flag is optional across adapters; within an envelope defining it, omitted means false under that envelope's documented encoding. False means only that this predicate is not satisfied. It never proves rollback, confirmed success, permission to retry, or resolution of an earlier uncertain request; unknown codes remain errors. Consumers may use true to select conservative handling, but must retain the canonical fields for explanation and recovery. A contradiction with those fields is an invalid envelope: never use false to suppress canonical uncertainty or true to grant success/retry permission. Recompute from the canonical response and operation context rather than storing an independently mutable classification. Adapter comparisons assert the same predicate wherever the field is exposed; no new field is required in a human-facing response or core error record.
+
+**Compatibility finding.** The inspected `internal/throwawayadapter/adapter.go` error-response branches use this predicate, including the normalized non-domain mutation failure. Keep the field; no code change is required for this one-field ruling. This does not review other error-envelope fields or certify the rest of the adapter.
