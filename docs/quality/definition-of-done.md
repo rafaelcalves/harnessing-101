@@ -66,10 +66,10 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 
 | # | Criterion | Checkable today? |
 | --- | --- | --- |
-| 1 | CLI product cycle (§2 walkthrough) | **No** — subprocess walkthrough passes; `LastStatusChange` in domain (`3a4d320`) but CLI `task` still prints unavailable for Doing/Blocked; darwin manifest pending (H101-55) |
+| 1 | CLI product cycle (§2 walkthrough) | **Partially** — linux/amd64 subprocess §2 walkthrough passes (`9a6b464`); darwin manifest pending (H101-55) |
 | 2 | Restart after crash | **Partially** — linux crash-reopen with state (`f242b2b`); handoff visibility now CLI-provable (`message`); crash test still uses host for ack survival; darwin manifest still needed |
-| 3 | Swappability (ADR 0003 UI-01–08) | **No** — engine UI-06 scenarios fixed (`3a4d320`); no `adaptercontract` suite or second adapter |
-| 4 | Containment preserved | **Partially** — store half satisfied (`24a2022`); UI gate enforced (`306c6fa`) except documented `cmd/harnessing` interim exception until `FrontendSession` migration |
+| 3 | Swappability (ADR 0003 UI-01–08) | **No** — UI-06 engine scenarios met (`8ba1112`/`3a4d320`); no `adaptercontract` suite or second adapter |
+| 4 | Containment preserved | **Satisfied** — store half (`24a2022`); presentation imports `api` only; `internal/assembly` sole `host` importer (`9a6b464`) |
 | 5 | Mailbox adapter (H101-22) | **No** — needs file mailbox wired to delivery-fact recorders |
 | 6 | First-run disclosure (H101-16) | **Satisfied** — every invocation, stderr, ADR 0002 sentence, CI tests (`1eda92b`) |
 | 7 | Phase 3 ops `Unsupported` | **No** — needs Capabilities/CLI surface and explicit `Unsupported` assertions |
@@ -1612,6 +1612,82 @@ Same principle god applied to Kevin: a criterion naming a scenario nobody has ob
 | 2 | **Partially satisfied** — linux crash-reopen; darwin pending |
 | 3 | **Not satisfied** — UI-06 engine scenarios met; adaptercontract + second adapter still needed |
 | 4 | **Partially satisfied** — UI gate except `cmd/harnessing` exception |
+| 5 | **Not satisfied** — mailbox H101-22 |
+| 6 | **Satisfied** |
+| 7 | **Not satisfied** |
+| 8 | **Satisfied** |
+| 9 | **N/A** |
+
+---
+
+## H101-55 reaffirmation (2026-09-21, prerequisite to H101-79)
+
+**Unchanged.** No darwin/arm64 native milestone manifest recorded. Linux/amd64 CI discharge for item 1 is **separate** from darwin — do not quote item 1 flat across both targets.
+
+---
+
+## H101-79 acceptance review (2026-09-21)
+
+Reviewed `8ba1112` (concurrent-commit seam proof) and `9a6b464` (`internal/api` migration + `LastStatusChange` on CLI). Re-ran import gate (tree 0, forbidden 1), subprocess walkthrough with `-race` (pass), `TestCommitMu_BlocksSecondCommitInTheNamedGap` (pass).
+
+**Verdict: ACCEPTED** (both commits)
+
+### Item 4 UI half — discharged?
+
+**Yes. Item 4 is SATISFIED** (both halves).
+
+The `cmd/harnessing` exception **was** the hole (H101-73). It is gone. `cmd/harnessing` imports only `api` and `assembly` — verified no `host` or `core/task` import.
+
+**Assembly-only `host` import is different in kind, not the same objection moved one package over.**
+
+| | `cmd/harnessing` exception (rejected) | `internal/assembly` exception (accepted) |
+| --- | --- | --- |
+| Role | Presentation acting as composition | **Trusted composition root** — ADR's intended sole `host` importer |
+| What it held | `Capabilities` directly | Open/Close/lifecycle + `FrontendSession` binding |
+| Could a careless UI bypass the session? | **Yes** — same package | **No** — presentation reaches only `api.FrontendSession` |
+
+Item 4 text: presentation must not import `host`; only assembly imports `host`. That is what the gate now enforces. The allowlist entry documents the **architectural role**, not a workaround for a presentation package.
+
+**Follow-up (non-blocking):** a second adapter will need its own assembly entry on the allowlist — not a regression, an expected extension.
+
+### Item 1 — discharged?
+
+**Yes on linux/amd64.** **Partially satisfied overall** (darwin pending per H101-55).
+
+| Check | Status |
+| --- | --- |
+| Subprocess §2 walkthrough | **Pass** — `TestCLI_Phase2ProductWalkthroughSubprocess` with `-race` |
+| Pending messages | **Yes** — `messages` before/after ack |
+| Reporter on Doing/Blocked | **Yes** — `printTask` uses `LastStatusChange`; `status()` asserts unverified reporter + last update on every status including Blocked |
+| `FrontendSession` surface | **Yes** — commands use `withSession` / `api.FrontendSession` via `assembly` |
+
+Do not report item 1 discharged flat across darwin/arm64 until native manifest or macOS runner.
+
+### Item 3 — second named scenario discharged?
+
+**Yes — the concurrent publish-ordering scenario is discharged** at the engine/implementation level.
+
+| Proof | Test |
+| --- | --- |
+| `commitMu` blocks second commit in the named gap | `TestCommitMu_BlocksSecondCommitInTheNamedGap` — deterministic seam (CAS, not `sync.Once`; Kevin caught the Once false positive) |
+| Why ordering matters | `TestEventBus_OutOfOrderPublishDropsTheEarlierRevision` — out-of-order publish drops R |
+| Stress supplement | `TestEngine_ConcurrentCommitsPublishInOrder` — 50 goroutines under `-race` |
+
+**Item 3 overall: still NOT SATISFIED** — adaptercontract suite + second adapter outstanding. Next implementer inherits a **met** criterion for this scenario, not merely a named one.
+
+### Informational
+
+- `check-gofmt.sh` now in CI — closes H101-76 gofmt follow-up recommendation.
+- God's sequencing note (Kevin amendment held during Claudio migration): acknowledged; separate commits verified.
+
+### Nine exit items — owner-ready standing (2026-09-21)
+
+| # | Standing |
+| --- | --- |
+| 1 | **Partially satisfied** — **linux/amd64 yes** (subprocess §2 walkthrough); darwin pending |
+| 2 | **Partially satisfied** — linux crash-reopen; darwin pending |
+| 3 | **Not satisfied** — UI-06 engine scenarios met; adaptercontract + second adapter needed |
+| 4 | **Satisfied** |
 | 5 | **Not satisfied** — mailbox H101-22 |
 | 6 | **Satisfied** |
 | 7 | **Not satisfied** |
