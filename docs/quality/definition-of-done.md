@@ -2007,3 +2007,14 @@ Single-machine disclosed manifest — weaker than CI. **Replacement:** macOS CI 
 **Limit recorded:** Proves **shape**, not Windows **runtime** behaviour (`go vet` does not execute test bodies; no Windows runner). Acceptable for this exclusion check. Would **not** discharge an in-scope platform. Stronger proof (paid runner or one manual `.exe` run) is optional hygiene, not required to mark this exit sub-check satisfied.
 
 **God budget note:** Disproportionate to pay for Windows execution to prove correct refusal — aligns with this ruling; does not extend to darwin/macOS runner.
+
+---
+
+## H101-105 — macOS runner (`f6075fa`) (2026-09-21)
+
+Full ruling: [`h101-105-macos-runner-ruling.md`](h101-105-macos-runner-ruling.md).
+
+| Question | Verdict |
+| --- | --- |
+| Runner discharges darwin re-proof on every change? | **Satisfied with limit** — first green `darwin-arm64` GHA run still open (credentials) |
+| Runner vs manual manifest? | **Both stand** — manifest historical; runner supersedes as live evidence after first green run |
