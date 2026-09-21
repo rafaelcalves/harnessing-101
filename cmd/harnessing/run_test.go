@@ -39,6 +39,27 @@ func TestRun_DisclosureIsUnconditionalAndKeepsStdoutScriptable(t *testing.T) {
 	}
 }
 
+// TestRun_DisclosureCaveatPrecedesReassuranceAcrossSemicolon pins a
+// semantic property, not exact prose: the caveat clause ("does not
+// confine") must sit before the semicolon and the reassurance clause
+// ("; it runs locally") after it, not the reverse. This is deliberate
+// (H101-46): a screenshot or pull-quote that truncates at the semicolon
+// must drop the reassurance, not the caveat — dropping the caveat would
+// leave a truncated quote reading as an unqualified promise of local-only
+// operation. Product may still revise the wording; this only catches a
+// human reordering the two clauses for readability, which would silently
+// flip which half survives truncation.
+func TestRun_DisclosureCaveatPrecedesReassuranceAcrossSemicolon(t *testing.T) {
+	caveat := strings.Index(disclosure, "does not confine")
+	reassurance := strings.Index(disclosure, "; it runs locally")
+	if caveat == -1 || reassurance == -1 {
+		t.Fatalf("disclosure clauses not found (caveat=%d reassurance=%d): %q", caveat, reassurance, disclosure)
+	}
+	if !(caveat < reassurance) {
+		t.Fatalf("disclosure clause order = caveat at %d, reassurance at %d; want caveat before the semicolon so truncation there drops the reassurance, not the caveat: %q", caveat, reassurance, disclosure)
+	}
+}
+
 func TestRun_DisclosurePrecedesFreshWorkspaceCommand(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := run([]string{"task", "-workspace", t.TempDir(), "missing"}, &out, &errOut)
