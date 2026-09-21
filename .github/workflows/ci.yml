@@ -22,6 +22,8 @@ jobs:
         run: go test ./...
       - name: Vet
         run: go vet ./...
+      - name: Check gofmt
+        run: ./scripts/check-gofmt.sh
       - name: Check production network dependencies
         run: ./scripts/check-no-network.sh
       - name: Check import containment

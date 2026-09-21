@@ -13,4 +13,4 @@ lint:
 	golangci-lint run ./...
 
 fmt:
-	gofmt -l .
+	./scripts/check-gofmt.sh
