@@ -112,6 +112,9 @@ func findTask(snap domain.Snapshot, id domain.TaskID) *domain.Task {
 func assertUI04EndState(t *testing.T, snap domain.Snapshot) {
 	t.Helper()
 	want := expected.UI04CycleEnd
+	if snap.Revision != want.WorkspaceRevision {
+		t.Fatalf("workspace revision = %d, want %d (boundaries H101-94 UI-04 final cut)", snap.Revision, want.WorkspaceRevision)
+	}
 	if len(snap.Agents) != want.AgentCount {
 		t.Fatalf("agent count = %d, want %d", len(snap.Agents), want.AgentCount)
 	}

@@ -66,8 +66,8 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 
 | # | Criterion | Checkable today? |
 | --- | --- | --- |
-| 1 | CLI product cycle (§2 walkthrough) | **Partially** — linux/amd64 subprocess §2 walkthrough passes (`9a6b464`); darwin manifest pending (H101-55) |
-| 2 | Restart after crash | **Partially** — linux crash-reopen with state (`f242b2b`); handoff visibility now CLI-provable (`message`); crash test still uses host for ack survival; darwin manifest still needed |
+| 1 | CLI product cycle (§2 walkthrough) | **Partially** — linux/amd64 CI + darwin/arm64 manifest (`02b1407`, [manifest](darwin-arm64-milestone-manifest-2026-09-21.md)); platform-agnostic gaps if any remain per latest review |
+| 2 | Restart after crash | **Partially** — linux + darwin native crash-reopen + lock per manifest; cross-target handoff ack proof still host-side on both |
 | 3 | Swappability (ADR 0003 UI-01–08) | **No** — `throwawayadapter` exists (`7dc7809`); no `adaptercontract` suite; UI-01–08 not run on both adapters |
 | 4 | Containment preserved | **Satisfied** — store half (`24a2022`); presentation imports `api` only; `internal/assembly` sole `host` importer (`9a6b464`) |
 | 5 | Mailbox adapter (H101-22) | **Satisfied** — wired in `assembly.WithSession` (`6bae581`); full-path integration test; sole-writer by call-graph + containment (limit: methods remain on `host.Capabilities`) |
@@ -1938,7 +1938,7 @@ Full writeups live in the repo for Stanley H101-91. Summary:
 | --- | --- | --- | --- |
 | **A1** (UI-03) | Generated IDs surfaced for interrupted callers; request-id idempotency | Whether caller-supplied entity IDs count as “generated”; what surface = “surfaced” | Request ID + revision on receipt = recoverable identity; entity IDs pre-held by caller |
 | **A2** (UI-02) | IOFailure uncertainty messaging; stable codes | Whether stage 1 needs fsync fault injection; OutcomeUncertain vs IOFailure assert target | Stage 1 = Denied/Conflict + receipt/status split only; IOFailure deferred |
-| **A3** (UI-04) | Identical domain outcomes for full cycle | Whether workspace revision counts when mailbox adds commits after send/ack | `UI04CycleEnd` asserts task fields only, not revision (12 user cmds vs 14 observed) |
+| **A3** (UI-04) | **Resolved** — boundaries H101-94 (`d372518`): 12 user groups + 2 delivery groups = revision 14 | — | `UI04CycleEnd.WorkspaceRevision = 14` at equivalent committed cut |
 
 ### Adapter divergences (stage 1)
 
@@ -1965,3 +1965,27 @@ UI-05..08 including Phase 3 `Unsupported` on `StartRun`/`StopRun`/`SetRunBudget`
 **Allowlist exception:** **No.** Do not add a second `host` importer entry like statestore’s test exception. The suite should not import `host`; harness now uses assembly only. Import set: `api`, `assembly`, `domain`, `throwawayadapter`, `expected` (+ stdlib).
 
 **Stage 2:** proceeds; H101-55 darwin manifest can run in parallel — not sequencing ahead unless you redirect.
+
+---
+
+## H101-98 — darwin/arm64 milestone manifest (2026-09-21)
+
+**Verdict:** MANIFEST RECORDED — [darwin-arm64-milestone-manifest-2026-09-21.md](darwin-arm64-milestone-manifest-2026-09-21.md) at commit `02b140768176991c9128772589cbbed7ec2d9691` (clean tree).
+
+### What it discharges (darwin/arm64 only)
+
+| Item | Effect |
+| --- | --- |
+| **1** darwin half | **Satisfied** — `TestCLI_Phase2ProductWalkthroughSubprocess` pass on disclosed host |
+| **2** darwin native | **Satisfied** — `TestRun_Phase2CycleRecoversAfterKilledCLI` + H101-20 lock tests pass on disclosed host |
+| **2** overall | **Still partially satisfied** — cross-target gaps unchanged (handoff ack crash proof host-side on both targets) |
+| **3** | **Not discharged** — adaptercontract native darwin run not in this manifest |
+
+### Evidence strength
+
+Single-machine disclosed manifest — weaker than CI. **Replacement:** macOS CI runner re-running the same three test blocks on every PR, with runner image ID recorded.
+
+### God follow-ups (H101-55, still want)
+
+1. **macOS CI runner** — raise **now** (manifest done; runner replaces manual re-runs).
+2. **Windows exclusion smoke** — still want it carded for Phase 2 exit (Unsupported workspace ops; version/help work).

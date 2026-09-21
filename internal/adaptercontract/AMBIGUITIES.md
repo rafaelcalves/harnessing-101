@@ -34,9 +34,11 @@ says, what it fails to say, and what `expected/` currently assumes instead.
 
 **What `expected/` assumes instead**
 
-- `UI03IdempotentRegister` and `TestUI03_*` treat **request ID + committed
-  workspace revision** on the receipt as the recoverable identity for retry
-  (idempotent replay returns the same receipt; workspace agent count stays 1).
+- `UI03IdempotentRegister` and `TestUI03_*` assert idempotent replay returns
+  the **same receipt** (request ID and revision match) and workspace agent count
+  stays 1. Retry identity is the **request ID**, not the revision number.
+- **Ruling (Angela/Stanley, 2026-09-21):** receipt revision is not retry
+  identity; a success echo alone cannot prove recovery of a lost response.
 - Entity IDs are **not** asserted as “surfaced on success” because the spec
   does not define that requirement for caller-supplied IDs; the interrupted
   caller already holds them from argv / JSON payload.
@@ -73,42 +75,37 @@ says, what it fails to say, and what `expected/` currently assumes instead.
 - Stage 1 asserts **Denied** and **Conflict** stable codes on write paths only
   (`TestUI02_DeniedAndConflictStableCodes`); receipt-vs-status separation on
   success (`TestUI02_ReceiptDistinctFromTaskStatus`).
-- **No IOFailure / OutcomeUncertain literal** — deferred to stage 2 or a
-  dedicated injected-fault helper; no expected string copied from CLI stderr.
-- **Risk if wrong:** adapters could regress uncertainty messaging while stage 1
-  stays green; H101-53 already flags this as follow-up, not stage-1 blocker.
+- **No IOFailure / OutcomeUncertain literal** yet — deferred until fault
+  injection mechanism and due stage are specified.
+- **Ruling (Angela/Stanley, 2026-09-21):** Denied + Conflict is **partial
+  coverage, not discharge** of the uncertainty path. **ADR 0004
+  `OutcomeUncertain`** governs uncertain mutations — assert **structured
+  `Effect` / `Confirmation`**, not a detail substring. If stage 2 needs fault
+  injection, record the gap and ask god rather than inventing a mechanism.
 
 ---
 
-## A3 — UI-04 workspace revision vs mailbox background commits
+## A3 — UI-04 workspace revision (RESOLVED)
 
-**What the spec says**
+**Status:** **Resolved** — `boundaries.md` H101-94 (`d372518`, 2026-09-21).
 
-- ADR 0003 UI-04: full interaction cycle with **identical domain outcomes**
-  (registry, task, blocker, message, ack, report, reject, accept).
-- Product definition §2 and item 1 walkthrough: same cycle, durable records.
-- Domain rule (boundaries): each successful user command advances workspace
-  revision by one.
-- H101-85 / item 5: `assembly.WithSession` runs `driveMailbox` after every
-  command; mailbox may call `RecordMessagePublished` / `RecordMessageProcessed`.
+**Spec now says**
 
-**What the spec fails to say**
+- Workspace revision starts at **0**; each **atomic commit group** advances it
+  once (not per field or event).
+- Delivery publication and delivery ingestion are **separate groups** from
+  `SendMessage` and from explicit acknowledgement.
+- Same-ID replay, confirmation, read, and failure add no group. Denied accept
+  contributes zero. Successful business no-op under a **new** request ID still
+  advances revision once (repeat acknowledgement case).
+- **Equivalent committed cut:** same named groups and terminal facts, mailbox
+  recording complete, no unrelated requests before snapshot. Receipt revision
+  may precede final snapshot revision.
+- **UI-04 final cut:** 12 user-request groups + 2 delivery-record groups =
+  **revision 14** (derived from declared groups, not observed output).
 
-- Whether “domain outcome” includes the **numeric workspace revision** after a
-  cycle that includes `send` + `ack`, when mailbox commits are not user commands
-  but do advance revision.
-- How adaptercontract should count commits when comparing to a naive
-  “one revision per user command” tally (12 user writes in UI-04 cycle).
+**What `expected/` now asserts**
 
-**What `expected/` assumes instead**
-
-- `UI04CycleEnd` asserts **task domain fields only**: status `Done`, title,
-  assignee, `CurrentResultID` = `res2`, agent count 2 (engineer + analyst).
-- **Workspace revision is intentionally omitted** from the fixture. A naive
-  count of user commands alone implies revision 12; observed revision after
-  full cycle with mailbox wiring is **14** (+2 from mailbox facts after send/ack
-  path). Asserting 12 would bake in an unwritten spec rule or require reading
-  adapter/engine output to learn the offset.
-- **Risk if wrong:** item 3 could require revision equality as part of
-  cross-adapter comparison; if so, spec must state whether mailbox commits count
-  and what the expected total is.
+- `UI04CycleEnd.WorkspaceRevision = 14` with task terminal state at that cut.
+- Cross-adapter comparison uses harness snapshot after full cycle (both adapters
+  drive mailbox via assembly on each invocation).

@@ -28,8 +28,8 @@ func Reviewers() []domain.AgentID {
 }
 
 // Receipt records an independently expected successful commit outcome.
-// Revision follows the domain rule: each successful command advances the
-// workspace revision by one, starting from 0 on an empty workspace.
+// Revision follows boundaries.md H101-94: start at 0; each atomic commit
+// group advances once (not per field/event).
 type Receipt struct {
 	RequestID domain.RequestID
 	Revision  uint64
@@ -51,20 +51,23 @@ var UI01ValidRegister = struct {
 // the idempotency scenario (UI-03).
 var UI03IdempotentRegister = Receipt{RequestID: "ui03-r1", Revision: 1}
 
-// UI04CycleEnd is the expected domain state after the full UI-04 interaction
-// cycle (ADR UI-04 + product definition §2 minimum cycle).
+// UI04CycleEnd is the expected domain state at the equivalent committed cut
+// after the full UI-04 cycle (boundaries.md H101-94 "UI-04 final cut"):
+// 12 user-request groups + 2 delivery-record groups = revision 14.
 var UI04CycleEnd = struct {
-	TaskStatus      domain.TaskStatus
-	TaskTitle       string
-	TaskAssignee    domain.AgentID
-	CurrentResultID domain.ResultID
-	AgentCount      int
+	WorkspaceRevision uint64
+	TaskStatus        domain.TaskStatus
+	TaskTitle         string
+	TaskAssignee      domain.AgentID
+	CurrentResultID   domain.ResultID
+	AgentCount        int
 }{
-	TaskStatus:      domain.TaskDone,
-	TaskTitle:       "Investigate",
-	TaskAssignee:    domain.AgentID(EngineerID),
-	CurrentResultID: domain.ResultID(ResultID2),
-	AgentCount:      2, // engineer and analyst; reviewer is authority not an agent record
+	WorkspaceRevision: 14,
+	TaskStatus:        domain.TaskDone,
+	TaskTitle:         "Investigate",
+	TaskAssignee:      domain.AgentID(EngineerID),
+	CurrentResultID:   domain.ResultID(ResultID2),
+	AgentCount:        2, // engineer and analyst; reviewer is authority not an agent record
 }
 
 // Stable domain error codes adapters must surface (ADR UI-02).
