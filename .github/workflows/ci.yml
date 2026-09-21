@@ -18,6 +18,14 @@ jobs:
           go-version: "1.27.1"
       - name: Build
         run: go build ./...
+      - name: Build for windows (compile-only; no windows runner exists yet)
+        run: GOOS=windows GOARCH=amd64 go build ./...
+        env:
+          CGO_ENABLED: "0"
+      - name: Vet windows-only test files (compile-only; cannot execute without a windows runner)
+        run: GOOS=windows GOARCH=amd64 go vet ./internal/adapters/statestore/... ./internal/assembly/...
+        env:
+          CGO_ENABLED: "0"
       - name: Test
         run: go test ./...
       - name: Vet
