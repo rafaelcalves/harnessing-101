@@ -1,6 +1,10 @@
 # Harnessing 101 — product definition
 
-Status: proposed Phase 0 scope; owner review required. Nothing described here is a shipped capability. Source: [project plan](../PROJECT-PLAN.md). Product choices below are recommendations, not validated user findings.
+**Status — 2026-09-21:** Phases 1 and 2 have exited. The command-line coordination workflow is implemented and runnable; see [Getting started](../GETTING-STARTED.md) and the [Phase 2 exit ruling, including its recorded limits](../quality/h101-112-phase2-item2-discharge-ruling.md). This does not establish real agent-tool compatibility or validated user benefit.
+
+Phase 3 is owner-approved and in progress, not accepted as complete; its [exit criteria](../quality/phase3-exit-criteria.md) distinguish the required capabilities from completed work. Other proposals in this document are not implementation or construction approval: unresolved scope changes still require owner review, and the graphical interface remains deferred.
+
+Source: [project plan](../PROJECT-PLAN.md). This document combines product decisions, recommendations and open questions. These are not validated user findings; user benefit and real agent-tool compatibility remain unvalidated.
 
 ## 1. Core user and job
 
