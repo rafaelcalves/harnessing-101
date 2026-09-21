@@ -211,6 +211,9 @@ func (e *Engine) TransitionTask(ctx context.Context, caller CallerScope, req Tra
 type ReportTaskResultRequest = api.ReportTaskResultRequest
 
 func (e *Engine) ReportTaskResult(ctx context.Context, caller CallerScope, req ReportTaskResultRequest) (domain.Receipt, error) {
+	if req.ResultID == "" {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "resultID must not be empty"}
+	}
 	if req.Summary == "" {
 		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "summary must not be empty"}
 	}

@@ -116,6 +116,38 @@ func TestReportAndAcceptCycle(t *testing.T) {
 	}
 }
 
+// H101-96: boundaries.md (75166b3) requires inbound creation IDs to be
+// explicit and non-empty, and the core must reject rather than allocate
+// one implicitly. The command-line adapter always supplied ResultID, so
+// this hole was invisible until a second, machine-facing front door
+// passed an empty value straight through.
+func TestReportTaskResult_EmptyResultIDRejected(t *testing.T) {
+	ctx := context.Background()
+	e, closeStore := newEngine(t, t.TempDir())
+	defer closeStore()
+
+	taskID := domain.TaskID("t-empty-result-id")
+	createDoingTask(t, ctx, e, taskID)
+
+	_, err := e.ReportTaskResult(ctx, caller(engineerID, false), task.ReportTaskResultRequest{
+		RequestID:            "req-report-empty",
+		TaskID:               taskID,
+		ResultID:             "",
+		ExpectedTaskRevision: 2,
+		Summary:              "fixed it",
+		Artifacts:            []string{"artifacts/patch.diff"},
+	})
+	mustErrorCode(t, err, domain.ErrInvalidArgument)
+
+	got, err := e.GetTask(ctx, taskID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Status != domain.TaskDoing {
+		t.Fatalf("status after rejected report = %s, want unchanged Doing", got.Status)
+	}
+}
+
 // The product rule the whole review round was about: there is no path
 // from Doing to Done that skips acceptance.
 func TestDirectDoingToDoneRejected(t *testing.T) {
