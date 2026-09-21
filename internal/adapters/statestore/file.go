@@ -49,6 +49,21 @@ type FileStore struct {
 	root     string
 	lockPath string
 	lockFile *os.File
+
+	// durableRevision is the highest workspace revision this process
+	// instance has itself confirmed durable (a successful post-rename
+	// directory fsync). It is why H101-56's fix does not make every
+	// replay pay a sync cost: within one process's lifetime, once a
+	// revision is confirmed durable, no later Commit call — fresh or
+	// replay — can have silently un-synced it (this store is the sole
+	// writer under mu, guarded further by H101-20's flock), so a replay
+	// whose receipt is at or below this line needs no new fsync. Only a
+	// replay above it — meaning the fsync for that very commit is the
+	// one that failed — pays the cost, which is exactly when paying it
+	// is the fix, not overhead. A freshly Opened FileStore starts at
+	// zero and so re-confirms its first replay regardless: a prior
+	// process's un-synced write is not this instance's fact to assume.
+	durableRevision uint64
 }
 
 // Open resolves root, creates it if missing, and takes the workspace
@@ -166,10 +181,16 @@ func (s *FileStore) Commit(ctx context.Context, workspaceID domain.WorkspaceID, 
 
 	key := receiptKey(req.CallerAgentID, req.RequestID)
 	if existing, found := state.Receipts[key]; found {
-		if existing.PayloadFingerprint == req.PayloadFingerprint {
-			return existing.Receipt, existing.Events, nil
+		if existing.PayloadFingerprint != req.PayloadFingerprint {
+			return domain.Receipt{}, nil, &domain.Error{Code: domain.ErrConflict, Detail: "request ID already used with a different payload"}
 		}
-		return domain.Receipt{}, nil, &domain.Error{Code: domain.ErrConflict, Detail: "request ID already used with a different payload"}
+		// H101-56: this branch used to return the saved receipt here,
+		// unconditionally. That is the bug ADR 0004 found reasoning
+		// about the fsync fix: a replay confirms no new mutation ran,
+		// but it does not by itself re-confirm the durability guarantee
+		// an earlier attempt for this exact receipt may have failed to
+		// establish. Ask first.
+		return s.confirmDurable(workspaceID, req.RequestID, existing)
 	}
 
 	working := cloneSnapshot(state.Snapshot)
@@ -194,10 +215,91 @@ func (s *FileStore) Commit(ctx context.Context, workspaceID domain.WorkspaceID, 
 	state.Snapshot = working
 	state.Receipts[key] = receiptRecord{Receipt: receipt, Events: events, PayloadFingerprint: req.PayloadFingerprint}
 
-	if err := s.writeLocked(state); err != nil {
+	durable, err := s.writeLocked(state)
+	if err != nil {
+		// The write itself did not apply (marshal/write/rename failure):
+		// nothing changed, this is a plain failure.
 		return domain.Receipt{}, nil, err
 	}
+	if !durable {
+		// The rename succeeded — the change applied, the receipt above
+		// is already what a replay will find — but the follow-up
+		// directory fsync failed, so durability is unconfirmed. This is
+		// ADR 0004's central mapping: Applied, not Unknown; Durability,
+		// not Outcome.
+		rev := working.Revision
+		return domain.Receipt{}, nil, &domain.Error{
+			Code:             domain.ErrOutcomeUncertain,
+			Detail:           "commit applied but directory fsync failed; durability unconfirmed",
+			RequestID:        req.RequestID,
+			WorkspaceID:      workspaceID,
+			Effect:           domain.EffectApplied,
+			Confirmation:     domain.ConfirmationDurability,
+			ObservedRevision: &rev,
+		}
+	}
+	s.durableRevision = working.Revision
 	return receipt, events, nil
+}
+
+// confirmDurable answers a replay. If this process instance already
+// knows the receipt's revision is durable (see FileStore.durableRevision),
+// it returns the cached receipt with no further I/O. Otherwise it
+// re-establishes the directory-fsync barrier before answering — the
+// "ask first" this function's callers exist for — and answers
+// OutcomeUncertain rather than a bare success if that barrier still
+// fails.
+func (s *FileStore) confirmDurable(workspaceID domain.WorkspaceID, requestID domain.RequestID, existing receiptRecord) (domain.Receipt, []domain.Event, error) {
+	if existing.Receipt.CommittedRevision <= s.durableRevision {
+		return existing.Receipt, existing.Events, nil
+	}
+	if err := fsyncDirFunc(s.root); err != nil {
+		rev := existing.Receipt.CommittedRevision
+		return domain.Receipt{}, nil, &domain.Error{
+			Code:             domain.ErrOutcomeUncertain,
+			Detail:           "replay could not reconfirm durability: " + err.Error(),
+			RequestID:        requestID,
+			WorkspaceID:      workspaceID,
+			Effect:           domain.EffectApplied,
+			Confirmation:     domain.ConfirmationDurability,
+			ObservedRevision: &rev,
+		}
+	}
+	s.durableRevision = existing.Receipt.CommittedRevision
+	return existing.Receipt, existing.Events, nil
+}
+
+// ResolveRequest is ADR 0004's caller-bound resolution operation: it
+// performs no domain mutation, allocates no new request ID, and does
+// not advance the workspace revision. It returns Confirmed (the
+// original receipt, after actually re-establishing durability) or
+// OutcomeUncertain if that confirmation still fails. Authorization is
+// structural, not a separate check: the receipt ledger is already keyed
+// by (CallerAgentID, RequestID) — receiptKey — so callerAgentID can only
+// ever find its own records; another principal's request is
+// indistinguishable from Absent, never exposed by mistake.
+//
+// Absent — no current receipt for this (caller, requestID) — is
+// reported as NotFound. That is a deliberate reuse of the existing
+// stable code, not a new one: NotFound already means "no record found
+// now," which is exactly Absent's contract (ADR 0004: "not 'this never
+// happened'"). Corrupt/unreadable storage is not Absent; readLocked's
+// own IOFailure surfaces first and is returned unchanged.
+func (s *FileStore) ResolveRequest(ctx context.Context, workspaceID domain.WorkspaceID, callerAgentID domain.AgentID, requestID domain.RequestID) (domain.Receipt, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, err := s.readLocked()
+	if err != nil {
+		return domain.Receipt{}, err
+	}
+	existing, found := state.Receipts[receiptKey(callerAgentID, requestID)]
+	if !found {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrNotFound, Detail: "no receipt found for this request ID"}
+	}
+
+	receipt, _, err := s.confirmDurable(workspaceID, requestID, existing)
+	return receipt, err
 }
 
 func (s *FileStore) readLocked() (persistedState, error) {
@@ -226,38 +328,49 @@ func (s *FileStore) readLocked() (persistedState, error) {
 // file under the same root, fsync it, then rename over the real file.
 // rename(2) within one filesystem is atomic, so a crash mid-write leaves
 // either the old or the new complete file, never a torn one.
-func (s *FileStore) writeLocked(state persistedState) error {
+//
+// The two return values are deliberately distinct kinds of failure. An
+// error means the write did not apply — everything up to and including
+// rename failed, so the caller changed nothing. durable=false with a nil
+// error means the opposite extreme: rename succeeded (the change is
+// already what a reload or a replay will find) but the follow-up
+// directory fsync failed, so its durability is unconfirmed — the
+// Applied/Durability case ADR 0004 maps to OutcomeUncertain. Collapsing
+// these into one error return is exactly what let H101-12's fix report
+// the right code (IOFailure with explanatory text) while nothing forced
+// a caller to treat it any differently from "nothing happened."
+func (s *FileStore) writeLocked(state persistedState) (durable bool, err error) {
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
-		return &domain.Error{Code: domain.ErrIOFailure, Detail: err.Error()}
+		return false, &domain.Error{Code: domain.ErrIOFailure, Detail: err.Error()}
 	}
 
 	tmpPath, err := safeJoin(s.root, tmpFileName)
 	if err != nil {
-		return err
+		return false, err
 	}
 	finalPath, err := safeJoin(s.root, stateFileName)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
-		return &domain.Error{Code: domain.ErrIOFailure, Detail: err.Error()}
+		return false, &domain.Error{Code: domain.ErrIOFailure, Detail: err.Error()}
 	}
 	if _, err := f.Write(data); err != nil {
 		_ = f.Close()
-		return &domain.Error{Code: domain.ErrIOFailure, Detail: err.Error()}
+		return false, &domain.Error{Code: domain.ErrIOFailure, Detail: err.Error()}
 	}
 	if err := f.Sync(); err != nil {
 		_ = f.Close()
-		return &domain.Error{Code: domain.ErrIOFailure, Detail: err.Error()}
+		return false, &domain.Error{Code: domain.ErrIOFailure, Detail: err.Error()}
 	}
 	if err := f.Close(); err != nil {
-		return &domain.Error{Code: domain.ErrIOFailure, Detail: err.Error()}
+		return false, &domain.Error{Code: domain.ErrIOFailure, Detail: err.Error()}
 	}
 	if err := os.Rename(tmpPath, finalPath); err != nil {
-		return &domain.Error{Code: domain.ErrIOFailure, Detail: err.Error()}
+		return false, &domain.Error{Code: domain.ErrIOFailure, Detail: err.Error()}
 	}
 	// rename(2) is atomic, but the directory entry it changes is not
 	// guaranteed durable across a crash until the containing directory
@@ -268,11 +381,17 @@ func (s *FileStore) writeLocked(state persistedState) error {
 	// not have: boundaries.md requires Commit to mean durable data, and
 	// AwaitingReview surviving a restart is the property this slice was
 	// asked to prove.
-	if err := fsyncDir(s.root); err != nil {
-		return &domain.Error{Code: domain.ErrIOFailure, Detail: "commit applied but durability unconfirmed: " + err.Error()}
+	if err := fsyncDirFunc(s.root); err != nil {
+		return false, nil
 	}
-	return nil
+	return true, nil
 }
+
+// fsyncDirFunc is a package-level seam so tests can inject a durability
+// fault deterministically (and clear it again) without a filesystem
+// trick that would only work on some platforms. Production code never
+// reassigns it.
+var fsyncDirFunc = fsyncDir
 
 func fsyncDir(dir string) error {
 	d, err := os.Open(dir)
