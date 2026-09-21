@@ -116,12 +116,19 @@ func TestCLI_Phase2ProductWalkthroughSubprocess(t *testing.T) {
 		t.Fatalf("reopened process lost accepted replacement: %q", final)
 	}
 
-	// The remaining §2 observation cannot be completed through the shipped
-	// command surface: there is no message/snapshot query, so acknowledgement
-	// and the claimed sender's unverified provenance cannot be shown to a user.
+	// The message query makes the handoff and its provenance visible through
+	// the product surface rather than through a host-side test query.
 	message := call("message", "-workspace", dir, "-workspace-id", wsID, "m1")
-	if message.code == 0 || !strings.Contains(message.stderr, `unknown command "message"`) {
-		t.Fatalf("message query unexpectedly changed or rendered differently: %+v", message)
+	if message.code != 0 {
+		t.Fatalf("message query failed: exit=%d stdout=%s stderr=%s", message.code, message.stdout, message.stderr)
 	}
-	t.Skipf("walkthrough blocked by missing CLI message/snapshot query; cannot assert acknowledged handoff or unverified sender presentation (message command result: %s)", strings.TrimSpace(message.stderr))
+	for _, want := range []string{
+		"Sender:      claimed-engineer (claimed routing claim; identity unverified)",
+		"Queued:", "Published:   (absent)", "Processed:   (absent)",
+		"Acknowledged:", "by analyst", "Task:        t1",
+	} {
+		if !strings.Contains(message.stdout, want) {
+			t.Fatalf("message output missing %q: %s", want, message.stdout)
+		}
+	}
 }
