@@ -1834,30 +1834,81 @@ Same class as item 7 naming rule. **Follow-up:** add `TestDeliverer_IngestAcks_Q
 | 2 | **Partially satisfied** |
 | 3 | **Not satisfied** — second adapter exists; contract suite + UI-01–08 on both outstanding |
 | 4 | **Satisfied** |
-| 5 | **Satisfied** — `6bae581`: assembly wiring + full-path test; sole-writer by call-graph (limit: `host.Capabilities` still exposes record methods) |
+| 5 | **Not satisfied** — mailbox adapter built; assembly wiring + full-path integration test outstanding |
 | 6 | **Satisfied** |
 | 7 | **Satisfied** |
 | 8 | **Satisfied** |
 | 9 | **N/A** |
 
-### H101-88 — Kevin item 5 re-ruling (`6bae581`)
+---
 
-**Verdict:** ACCEPTED — item 5 **SATISFIED** with documented limit on sole-writer enforcement.
+## H101-88 acceptance review (2026-09-21)
 
-**God request:** Re-rule item 5 on `6bae581` after Kevin H101-85 closed three H101-83 gaps. God verified full suite + race green. Do not review contract suite or walkthrough assertion change.
+Reviewed commit `6bae581` (Kevin H101-85: assembly mailbox wiring + integration tests). Re-ruling item 5 only — closes the three follow-ups from [H101-83](#h101-83-acceptance-review-2026-09-21). God verified full suite + race green; code not re-verified here per god H101-89.
 
-**Gap closure verified:**
+**Verdict: ACCEPTED** — item 5 **SATISFIED** with documented limit on sole-writer enforcement.
 
-1. **Assembly wiring** — `assembly.WithSession` calls `driveMailbox` after every command: `DeliverPending` → `IngestPending` → `IngestAcks`. Mailbox failure logs to stderr and does not fail the command. `TestWithSession_MailboxDeliveryFailureDoesNotFailTheCommand` passes.
+### 1. Item 5 — the three H101-83 gaps
 
-2. **Real end-to-end** — `TestWithSession_FullMailboxPath_SendPublishProcessAck` passes: real engine + `FileStore` + `FileMailbox` through `WithSession`; external ack via `WriteAck` + second session ingests it.
+H101-83 left item 5 **NOT SATISFIED** on three concrete gaps. Each is now closed on `6bae581`:
 
-3. **Sole writer** — Within repo call graph, only `assembly/driveMailbox` passes `host.Capabilities` to `mailbox.Deliverer`; `cmd/harnessing` holds only `api.FrontendSession` (no recorders); import allowlist restricts `host` to `internal/assembly`. **Limit recorded:** `host.Capabilities` still exposes `RecordMessagePublished`/`RecordMessageProcessed` — enforcement is call-graph + containment, not type-erasure. Optional follow-up when owner funds type-level hardening; not a Phase 2 item 5 blocker (same class as package-level vs type-level FrontendSession check in H101-73).
+| Gap (from H101-83) | What closed it | Evidence |
+| --- | --- | --- |
+| **Assembly wiring** — `Deliverer` existed but product path never invoked it | `assembly.WithSession` calls `driveMailbox` after every command: `DeliverPending` → `IngestPending` → `IngestAcks` | `internal/assembly/session.go`; `TestWithSession_MailboxDeliveryFailureDoesNotFailTheCommand` — mailbox I/O failure logs to stderr and does **not** fail the user command |
+| **Full send → publish → process → ack** — deliverer tests used `fakeRecorder` with pre-seeded messages; no real engine chain | `TestWithSession_FullMailboxPath_SendPublishProcessAck` — real `Engine` + `FileStore` + `FileMailbox` through `WithSession`; external ack via `WriteAck` + second session ingests it | `internal/assembly/mailbox_integration_test.go` |
+| **Sole writer** — `host.Capabilities` still exposed record methods; no proof only mailbox drove them in product path | Call-graph + containment argument (see §2 below) | Only `assembly/driveMailbox` passes `host.Capabilities` to `mailbox.Deliverer`; `cmd/harnessing` holds `api.FrontendSession` only; import allowlist restricts `host` to `internal/assembly` |
 
-4. **NotFound quarantine** — `TestDeliverer_IngestAcks_QuarantinesNotFound` exists and passes (`deliverer_test.go`).
+**H101-83 follow-up discharged separately:** `TestDeliverer_IngestAcks_QuarantinesNotFound` (`deliverer_test.go:206`, mirrors Denied at `:169`) — god confirmed; not re-verified here.
 
-**Item 5 ruling:** **SATISFIED** — all three H101-83 gaps closed for Phase 2 product path. Residual sole-writer limit documented above; does not block exit.
+**Item 5 ruling: SATISFIED.** All three gaps closed for the Phase 2 product path.
 
-**Out of scope (per god):** contract suite (still absent); walkthrough assertion change (ruled correct by god).
+### 2. Sole-writer proof — why call-graph + containment is sufficient here
 
-**Next:** H101-55 darwin manifest (item 1). Contract suite when fresh temp delivers. Optional follow-up: remove record methods from `host.Capabilities` for type-level sole-writer.
+Item 5's criterion (line 87) is behavioural: *"File-protocol mailbox is the sole writer of `RecordMessagePublished` and `RecordMessageProcessed`."* It does **not** require that those methods be absent from any type — only that the **file-protocol mailbox adapter** is the sole driver of those facts in the shipped product path.
+
+**What the proof covers:**
+
+1. **Containment** — presentation (`cmd/harnessing`) cannot import `host` or call record methods; it sees `api.FrontendSession` only (item 4, H101-73).
+2. **Single wiring site** — within `internal/assembly`, only `driveMailbox` constructs a `Deliverer` with `host.Capabilities` as recorder; every command path goes through `WithSession`.
+3. **Adapter discipline** — `mailbox.Deliverer` is the only production caller of `RecordMessagePublished` / `RecordMessageProcessed` on that capabilities handle; publish-before-process ordering is enforced inside `Deliverer` (unchanged from H101-83).
+
+**What would break the proof (regression risks a future reader must watch):**
+
+- A new `internal/assembly` code path that holds `host.Capabilities` and calls record methods outside `driveMailbox`.
+- Relaxing the import allowlist so presentation or a third package imports `host` and reaches `Capabilities`.
+- A second adapter or integration path that injects `Capabilities` directly instead of going through `WithSession` → `driveMailbox`.
+
+These are **reviewable** failures — same class as H101-73's package-level vs type-level `FrontendSession` check. The allowlist + assembly-only wiring is the Phase 2 enforcement mechanism; it is not cryptographic.
+
+**Limit recorded:** `host.Capabilities` still exposes `RecordMessagePublished` and `RecordMessageProcessed`. A careless assembly change could call them without going through `Deliverer`. That is **not** waived — it is **accepted as residual risk** for Phase 2 because the criterion asks for sole-writer behaviour in the product path, not compile-time erasure of the methods.
+
+### 3. When type-level prevention becomes required (Phase 3 obligation)
+
+Type-level removal of record methods from `host.Capabilities` (or narrowing the recorder interface to what `Deliverer` alone implements) is **not** a Phase 2 exit blocker. It becomes a **Phase 3 obligation** if any of the following land:
+
+| Trigger | Why type-level matters then |
+| --- | --- |
+| **Second message-fact writer** — Phase 3 process supervision or run-output paths that must record message lifecycle facts independently of the file mailbox | Two legitimate writers cannot be disambiguated by "only assembly calls `driveMailbox`" alone; the type system must separate mailbox facts from supervision facts |
+| **Third-party or out-of-tree assembly** — an integration that composes `host.Open` + `Capabilities` without using `WithSession` | Call-graph proof is repo-local; external composers need compile-time denial |
+| **Repeated sole-writer regressions** — a review catches a second assembly path calling record methods | Hardening stops being optional hygiene and becomes exit criteria for the next phase |
+
+Until one of those triggers fires, documenting the call-graph limit in this review is the correct artefact for phase sign-off.
+
+### Out of scope (per god H101-88)
+
+- Contract suite (`internal/adaptercontract/`) — still absent; item 3 unchanged.
+- Walkthrough assertion change — ruled correct by god; not reopened.
+
+### Nine exit items — owner-ready standing (2026-09-21, post-H101-88)
+
+| # | Standing |
+| --- | --- |
+| 1 | **Partially satisfied** — linux/amd64 yes; darwin pending (H101-55) |
+| 2 | **Partially satisfied** |
+| 3 | **Not satisfied** — second adapter exists; contract suite + UI-01–08 on both outstanding |
+| 4 | **Satisfied** |
+| 5 | **Satisfied** — `6bae581`: assembly wiring + full-path test; sole-writer by call-graph + containment (limit: methods remain on `host.Capabilities`; see §2–§3) |
+| 6 | **Satisfied** |
+| 7 | **Satisfied** |
+| 8 | **Satisfied** |
+| 9 | **N/A** |
