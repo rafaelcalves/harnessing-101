@@ -12,6 +12,7 @@ github.com/rafaelcalves/harnessing-101/internal/host # sole composition root; co
 # Production packages allowed to import the ports package, which contains the
 # outbound persistence contract:
 github.com/rafaelcalves/harnessing-101/internal/adapters/statestore
+github.com/rafaelcalves/harnessing-101/internal/adapters/mailbox # H101-22 outbound mailbox adapter; implements ports.Mailbox, holds no host/api-facing state beyond the Recorder interface it declares locally.
 github.com/rafaelcalves/harnessing-101/internal/core/task
 github.com/rafaelcalves/harnessing-101/internal/host # sole composition root; injects persistence privately; does not expose mutation.
 

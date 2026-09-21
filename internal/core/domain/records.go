@@ -156,7 +156,25 @@ type Envelope struct {
 	Kind             MessageKind
 	Body             string
 	CreatedAt        time.Time
+	TaskID           *TaskID
 	ReplyToMessageID *MessageID
+}
+
+// MessageAcknowledgement is the mailbox's second file-protocol record
+// (boundaries.md "file acknowledgement and archival"): a protocol
+// control record, not a Request/Inform/Result message, and never itself
+// requests an acknowledgement. ControlRecordID is the record's own
+// identity for deduplication — distinct from MessageID, the message it
+// acknowledges. RecipientAgentID is the claimed acknowledging agent; the
+// adapter must establish that scope from where the record was found
+// (which agent's own area it came from), never trust this field alone
+// to grant recipient authority.
+type MessageAcknowledgement struct {
+	SchemaVersion     int
+	WorkspaceID       WorkspaceID
+	ControlRecordID   string
+	OriginalMessageID MessageID
+	RecipientAgentID  AgentID
 }
 
 // Message is the durable record for one handoff. Delivery facts are separate
