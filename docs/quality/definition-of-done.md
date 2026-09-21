@@ -66,7 +66,7 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 
 | # | Criterion | Checkable today? |
 | --- | --- | --- |
-| 1 | CLI product cycle (§2 walkthrough) | **No** — subprocess walkthrough exists (`737d453`) but §2 still requires pending-message inspection and reporter/last-update per status (H101-68 exit-blocking); darwin manifest also pending (H101-55) |
+| 1 | CLI product cycle (§2 walkthrough) | **No** — subprocess walkthrough passes (`3d118cc`); surface gaps closed (H101-68); **domain gap**: transition actor/timestamp not persisted for Doing/Blocked; darwin manifest pending (H101-55) |
 | 2 | Restart after crash | **Partially** — linux crash-reopen with state (`f242b2b`); handoff visibility now CLI-provable (`message`); crash test still uses host for ack survival; darwin manifest still needed |
 | 3 | Swappability (ADR 0003 UI-01–08) | **No** — `GetSnapshot`/`FrontendSession` (`d906a9c`); UI-06 subscription gap; no `adaptercontract` suite or second adapter |
 | 4 | Containment preserved | **Partially** — store half satisfied (`24a2022`); UI import allowlist (no host from presentation) not yet enforced |
@@ -1371,6 +1371,90 @@ H101-58 acceptance (`737d453`) stands — message query is no longer the blocker
 | 1 | **Not satisfied** — subprocess §2 walkthrough proves most of cycle; exit-blocked on pending-message inspection + reporter/last-update (H101-68); darwin pending after that |
 | 2 | **Partially satisfied** — linux crash-reopen with task/result state; handoff CLI-visible; crash ack proof still host-side; darwin pending |
 | 3 | **Not satisfied** — no `adaptercontract` suite + second adapter; UI-06 subscription gap (H101-61) |
+| 4 | **Partially satisfied** — store-import yes; UI import allowlist not enforced |
+| 5 | **Not satisfied** — mailbox H101-22 not wired to delivery-fact recorders |
+| 6 | **Satisfied** — first-run disclosure (`1eda92b`) |
+| 7 | **Not satisfied** — Phase 3 ops `Unsupported` surface |
+| 8 | **Satisfied** — zero network on CLI tree |
+| 9 | **N/A** — test layering policy |
+
+---
+
+## H101-69 / H101-68 acceptance review (2026-09-21)
+
+Reviewed commit `3d118cc` (`harnessing messages`, `task` reporter/last-update, walkthrough assertions). Re-ran `go test -count=1 ./cmd/harnessing/ -run TestCLI_Phase2ProductWalkthroughSubprocess` — pass (1.27s).
+
+**Verdict: ACCEPTED WITH FOLLOW-UP**
+
+H101-68 closes the **two surface gaps** that blocked item 1 in H101-67. It reveals a **fourth gap at domain depth** that still blocks discharge.
+
+### Item 1 — does linux/amd64 discharge now?
+
+**No. Still NOT SATISFIED on any platform** (including linux/amd64). Do not report item 1 discharged.
+
+### What H101-68 fixed (the two retracted gaps)
+
+| Gap (H101-67) | Fixed? | Evidence |
+| --- | --- | --- |
+| Inspect pending messages | **Yes** | `harnessing messages` via `GetSnapshot`; walkthrough asserts pending count 1 before ack, 0 after |
+| Reporter + last update | **Partial** | `task` prints `Reporter:` / `Last update:`; walkthrough asserts on final `Done` state with `identity unverified` |
+
+### The fourth gap — transition provenance (domain, not CLI)
+
+For **Doing** or **Blocked** with no current result, `task` prints:
+
+```text
+Reporter:   (unavailable; status-update provenance is not recorded)
+Last update: (unavailable; status-update timestamp is not recorded)
+```
+
+Checked `internal/core/task/engine.go`: `TransitionTask` records the transition but **does not persist caller actor or timestamp** on the task record. Claudio's explicit unavailable rendering is the right call — not substituting creator or task time — but it means the product **cannot answer §2's question** for in-progress and blocked states.
+
+### Does §2 require reporter/last-update for every status, or only where a result exists?
+
+**Every status category §2 names — not only where a result exists.**
+
+[`definition.md`](../product/definition.md) §2 line 21 lists four things one status view must answer: assigned, **reported in progress**, **blocked**, and result ready for review. The next sentence: **"Every status identifies its reporter and last update."** That applies to all four categories, not only `AwaitingReview`.
+
+Item 1 line 79 repeats this: status queries must show assigned / in-progress / blocked / awaiting-review **with reporter identity**. The walkthrough exercises `Blocked` and `Doing` but `status()` only asserts the `Status:` line — it never asserts reporter during those states because the data does not exist.
+
+| Status | Reporter/last-update today | Satisfies §2? |
+| --- | --- | --- |
+| Todo (assigned) | Creator provenance | **Yes** |
+| Doing (in progress) | Unavailable | **No** |
+| Blocked | Unavailable | **No** |
+| AwaitingReview / Done | Result provenance | **Yes** |
+
+**Same shape as H101-58**, one layer deeper: honest "(unavailable)" is not discharge — §2 requires the identity and time, not a disclaimer that they were not recorded.
+
+**Exit-blocking work:** persist transition actor + timestamp in the engine/domain (records change — route design to Stanley per `boundaries.md`; implement via Kevin). Then expose on `task`, assert in walkthrough for at least one `Doing` and one `Blocked` step.
+
+H101-68 acceptance stands for what it delivered; it does not discharge item 1.
+
+### God Q1 — `messages` via snapshot vs UI-06
+
+**Satisfies the enumeration/discovery half of UI-06 for messages; does not discharge UI-06 or item 3.**
+
+| UI-06 part | `messages` via `GetSnapshot` | H101-61 (Kevin) |
+| --- | --- | --- |
+| Discover records without prior entity IDs | **Yes** for pending messages — recipient need not know message ID | N/A |
+| Complete detached snapshot | Uses `GetSnapshot` (same port UI-06 names) | — |
+| Observe from cursor without losing commits | **No** — no subscription/replay | Subscription + replay |
+| Deduplicate replays / `CursorExpired` reload | **No** | H101-61 scope |
+
+**They meet in the middle, not as duplicates:** snapshot enumeration is the right CLI route for "inspect pending messages" (item 1 / §2); subscription/replay is still required before item 3 can credit UI-06 fully. No seam that blocks item 1 once transition provenance lands.
+
+### God Q2 — darwin (H101-55)
+
+Unchanged. Even after transition provenance, **linux/amd64 discharge is separate from darwin/arm64** — native manifest or macOS runner required before quoting item 1 flat across both targets.
+
+### Nine exit items — owner-ready standing (2026-09-21, post-H101-68)
+
+| # | Standing |
+| --- | --- |
+| 1 | **Not satisfied** — walkthrough passes; surface §2 gaps closed (H101-68); **exit-blocked on transition provenance** (domain); darwin pending after that |
+| 2 | **Partially satisfied** — linux crash-reopen with task/result state; handoff CLI-visible; crash ack proof still host-side; darwin pending |
+| 3 | **Not satisfied** — no `adaptercontract` suite + second adapter; UI-06 subscription/replay gap (H101-61) |
 | 4 | **Partially satisfied** — store-import yes; UI import allowlist not enforced |
 | 5 | **Not satisfied** — mailbox H101-22 not wired to delivery-fact recorders |
 | 6 | **Satisfied** — first-run disclosure (`1eda92b`) |
