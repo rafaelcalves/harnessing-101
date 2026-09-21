@@ -66,7 +66,7 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 
 | # | Criterion | Checkable today? |
 | --- | --- | --- |
-| 1 | CLI product cycle (§2 walkthrough) | **Partially** — linux subprocess §2 walkthrough (`737d453`, `TestCLI_Phase2ProductWalkthroughSubprocess`); darwin manifest pending (H101-55); §2 follow-ups: pending-message list, reporter per status |
+| 1 | CLI product cycle (§2 walkthrough) | **No** — subprocess walkthrough exists (`737d453`) but §2 still requires pending-message inspection and reporter/last-update per status (H101-68 exit-blocking); darwin manifest also pending (H101-55) |
 | 2 | Restart after crash | **Partially** — linux crash-reopen with state (`f242b2b`); handoff visibility now CLI-provable (`message`); crash test still uses host for ack survival; darwin manifest still needed |
 | 3 | Swappability (ADR 0003 UI-01–08) | **No** — `GetSnapshot`/`FrontendSession` (`d906a9c`); UI-06 subscription gap; no `adaptercontract` suite or second adapter |
 | 4 | Containment preserved | **Partially** — store half satisfied (`24a2022`); UI import allowlist (no host from presentation) not yet enforced |
@@ -1325,6 +1325,51 @@ Handoff **visibility** in a product walkthrough is now CLI-provable. Item 2's **
 | --- | --- |
 | 1 | **Partially satisfied** — linux/amd64 subprocess §2 walkthrough passes in CI; darwin/arm64 native evidence pending (H101-55); minor §2 follow-ups |
 | 2 | **Partially satisfied** — linux crash-reopen with task/result state; handoff CLI-visible but crash proof still host-side for ack; darwin pending |
+| 3 | **Not satisfied** — no `adaptercontract` suite + second adapter; UI-06 subscription gap (H101-61) |
+| 4 | **Partially satisfied** — store-import yes; UI import allowlist not enforced |
+| 5 | **Not satisfied** — mailbox H101-22 not wired to delivery-fact recorders |
+| 6 | **Satisfied** — first-run disclosure (`1eda92b`) |
+| 7 | **Not satisfied** — Phase 3 ops `Unsupported` surface |
+| 8 | **Satisfied** — zero network on CLI tree |
+| 9 | **N/A** — test layering policy |
+
+---
+
+## H101-67 — amendment to H101-65 item 1 discharge (2026-09-21)
+
+**Context:** God asked Claudio to re-read [`definition.md`](../product/definition.md) §2 after H101-58 landed. Claudio reports two gaps I ruled non-blocking in H101-65 are **required by §2**. God asks whether item 1's linux/amd64 discharge still stands.
+
+**Pick: option 2 — they are required; item 1 un-discharges until they exist.**
+
+### Ruling
+
+**Item 1's linux/amd64 discharge is retracted.** H101-65 was wrong to call pending-message inspection and reporter/last-update **non-blocking follow-up**. They are the same shape as H101-58: §2 names a capability item 1 anchors to; the walkthrough cannot exercise it through the shipped `harnessing` command; passing the test while skipping the step is passing over a hole.
+
+| Gap | §2 / item 1 source | CLI today | Same class as H101-58? |
+| --- | --- | --- | --- |
+| Inspect **pending** messages | §2 line 19 | No list or pre-ack pending query; `message <id>` only after ack | **Yes** |
+| Reporter + last update per status | §2 line 21; item 1 line 79 ("with reporter identity") | `task` shows Assignee + `Created by` only — not who reported Blocked/AwaitingReview or when | **Yes** |
+| Connect existing sessions | §2 line 19 | Documentation/onboarding only — no product command expected | **No** — Claudio agrees; not exit-blocking |
+
+**Nothing distinguishes the first two from H101-58** except that acknowledgement visibility is now fixed. The remaining gaps are structural the same way: product surface cannot take the §2 step.
+
+**Item 1 standing: NOT SATISFIED on any platform** (including linux/amd64). Subprocess walkthrough progress is real and credited; **discharge waits on H101-68** plus walkthrough assertions, then darwin native evidence per H101-55.
+
+H101-58 acceptance (`737d453`) stands — message query is no longer the blocker; these two are.
+
+### Informational — landed since H101-65 (no discharge impact)
+
+| Change | Commit | Effect on prior gaps |
+| --- | --- | --- |
+| `OutcomeUncertain` reaches CLI | `94105b8` | Closes H101-65 Q4 / H101-63 follow-up — CLI branches on code then `Effect`/`Confirmation` policy table; `Detail` not read for UNCERTAIN line |
+| `ResolveRequest` bound on `FrontendSession` | (same card) | Stanley's caller-binding qualification is now behaviour-tested — two sessions, same request ID, different answers; not an item-1/3 discharge by itself |
+
+### Nine exit items — owner-ready standing (amended 2026-09-21)
+
+| # | Standing |
+| --- | --- |
+| 1 | **Not satisfied** — subprocess §2 walkthrough proves most of cycle; exit-blocked on pending-message inspection + reporter/last-update (H101-68); darwin pending after that |
+| 2 | **Partially satisfied** — linux crash-reopen with task/result state; handoff CLI-visible; crash ack proof still host-side; darwin pending |
 | 3 | **Not satisfied** — no `adaptercontract` suite + second adapter; UI-06 subscription gap (H101-61) |
 | 4 | **Partially satisfied** — store-import yes; UI import allowlist not enforced |
 | 5 | **Not satisfied** — mailbox H101-22 not wired to delivery-fact recorders |
