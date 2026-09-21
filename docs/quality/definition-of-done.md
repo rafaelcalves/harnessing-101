@@ -1,5 +1,28 @@
 # Harnessing 101 — definition of done and phase criteria
 
+## Current Phase 2 ruling (2026-09-21)
+
+**Phase 2 has exited.** This is the current ruling; use it instead of a dated
+standing later in this file. The entries below are an append-only review log, so
+earlier statements such as “not satisfied” and “partially satisfied” remain true
+for the revisions they reviewed but are **superseded as current status**. The
+original `Status: Proposed, Phase 0` header is retained as part of that history;
+it is not the current project or phase status.
+
+| Item | Current ruling | Authority |
+| --- | --- | --- |
+| 1 — CLI product cycle | **SATISFIED** | [Phase 2 exit ruling](h101-112-phase2-item2-discharge-ruling.md#3-phase-2-exit) |
+| 2 — Restart after crash | **SATISFIED** on ADR 0001 targets; the Windows compile-only exclusion is the separate remaining platform limit | [Item 2 ruling](h101-112-phase2-item2-discharge-ruling.md#1-item-2-verdict) and [Windows disposition](h101-112-phase2-item2-discharge-ruling.md#2-windows--h101-103) |
+| 3 — Swappability | **SATISFIED WITH LIMIT**; G1–G4 and G6–G7 remain documented limits | [Item 3 ruling](h101-107-phase2-item3-ruling.md#verdict) |
+| 4 — Containment | **SATISFIED** | [Phase 2 exit ruling](h101-112-phase2-item2-discharge-ruling.md#3-phase-2-exit) |
+| 5 — Mailbox adapter | **SATISFIED**; the recorded type-level enforcement limit does not block exit | [Phase 2 exit ruling](h101-112-phase2-item2-discharge-ruling.md#3-phase-2-exit) and [H101-88 log entry](#h101-88-acceptance-review-2026-09-21) |
+| 6 — First-run disclosure | **SATISFIED** | [Phase 2 exit ruling](h101-112-phase2-item2-discharge-ruling.md#3-phase-2-exit) |
+| 7 — Phase 3 operations rejected | **SATISFIED** | [Phase 2 exit ruling](h101-112-phase2-item2-discharge-ruling.md#3-phase-2-exit) |
+| 8 — Zero network | **SATISFIED** | [Phase 2 exit ruling](h101-112-phase2-item2-discharge-ruling.md#3-phase-2-exit) |
+| 9 — Test layering | **N/A** — policy; the required test layers are present | [Phase 2 exit ruling](h101-112-phase2-item2-discharge-ruling.md#3-phase-2-exit) |
+
+---
+
 Status: **Proposed**, Phase 0. Owner: Kelly (QA). Applies to all `H101-` cards.
 
 ---
