@@ -2,9 +2,10 @@
 
 This guide takes you from a clean clone to one completed task with two agent
 identities and one human reviewer. You will assign work, record a handoff,
-acknowledge it, record and resolve a blocker, report a result, and accept it.
+acknowledge it, record and resolve a blocker, reject and replace a result, and
+accept the replacement.
 
-The workflow was run against commit `7401b52` on 2026-09-21. Every documented
+The workflow was run against commit `f2d99fb` on 2026-09-21. Every documented
 step completed with the output shown below.
 
 ## What this guide does—and does not—connect
@@ -25,6 +26,12 @@ as unverified.
 Workspace operation is supported on macOS Apple Silicon (`darwin/arm64`) and
 Linux x86-64 (`linux/amd64`) on native local storage. Install Go 1.27.1 or later,
 then run:
+
+Windows workspace commands deliberately return `Unsupported`; only commands
+that do not open a workspace, such as `help` and `version`, may run there. No
+support claim is made for other operating systems, processor architectures, or
+network and cloud-synchronised filesystems. This is a platform boundary, not a
+lock-file problem or a weaker fallback mode.
 
 ```sh
 git clone https://github.com/rafaelcalves/harnessing-101.git
@@ -208,7 +215,7 @@ Task task-1
   Reporter:   agent-one (claimed reporter, unverified)
 ```
 
-## 7. Report and accept the result
+## 7. Report, reject, rework, and accept the result
 
 `-expected-revision` is the **task revision** shown by `harnessing task`, not the
 workspace revision in a write receipt. Message delivery can advance the workspace
@@ -228,18 +235,101 @@ harnessing report: OK (request req-report-result, workspace revision 11)
 ```
 
 Read the task again. It should show `Status: AwaitingReview`, `Revision: 5`, and
-`ResultID: result-1`. Use that new task revision to accept the result:
+`ResultID: result-1`.
+
+### Recover from a stale task revision
+
+The following rejection deliberately uses stale task revision 4 to show the
+failure and recovery path. It must fail and must not change the task:
 
 ```sh
-$H accept -workspace "$WORKSPACE" -workspace-id demo \
-  -reviewer owner -caller owner -request-id req-accept-result \
-  -task task-1 -result result-1 -expected-revision 5
+$H reject -workspace "$WORKSPACE" -workspace-id demo \
+  -reviewer owner -caller owner -request-id req-reject-result \
+  -task task-1 -result result-1 -expected-revision 4 \
+  -reason "Add the missing recovery steps."
+EXIT_CODE=$?
+printf 'exit status: %s\n' "$EXIT_CODE"
+```
+
+Expected command result, after the repeated disclosure:
+
+```text
+harnessing reject: Conflict: expectedTaskRevision is stale
+exit status: 1
+```
+
+On this `Conflict`, do not guess the new revision and do not switch to the
+workspace revision. Re-read the task:
+
+```sh
+$H task -workspace "$WORKSPACE" -workspace-id demo task-1
+```
+
+It remains `AwaitingReview` at task `Revision: 5` with `ResultID: result-1`.
+A `Conflict` did not commit, so retry the **same intended operation** with the
+same request ID and the freshly read task revision. If you change the intended
+operation or its payload, use a new request ID instead.
+
+### Reject and replace the result
+
+Retry the rejection with the current task revision:
+
+```sh
+$H reject -workspace "$WORKSPACE" -workspace-id demo \
+  -reviewer owner -caller owner -request-id req-reject-result \
+  -task task-1 -result result-1 -expected-revision 5 \
+  -reason "Add the missing recovery steps."
 ```
 
 Expected receipt:
 
 ```text
-harnessing accept: OK (request req-accept-result, workspace revision 12)
+harnessing reject: OK (request req-reject-result, workspace revision 12)
+```
+
+Re-read the task:
+
+```sh
+$H task -workspace "$WORKSPACE" -workspace-id demo task-1
+```
+
+Rejection returns it to `Status: Doing` at task `Revision: 6`; it is not
+complete. `result-1` remains in history as the rejected result. `agent-one` now
+reports a replacement with a new result ID:
+
+```sh
+$H report -workspace "$WORKSPACE" -workspace-id demo \
+  -caller agent-one -request-id req-report-rework \
+  -task task-1 -result result-2 -expected-revision 6 \
+  -summary "Startup guide reviewed with recovery steps." \
+  -artifact docs/GETTING-STARTED.md
+```
+
+Expected receipt:
+
+```text
+harnessing report: OK (request req-report-rework, workspace revision 13)
+```
+
+Read the task once more:
+
+```sh
+$H task -workspace "$WORKSPACE" -workspace-id demo task-1
+```
+
+It should show `Status: AwaitingReview`, `Revision: 7`, and `ResultID: result-2`.
+Accept that exact replacement:
+
+```sh
+$H accept -workspace "$WORKSPACE" -workspace-id demo \
+  -reviewer owner -caller owner -request-id req-accept-result \
+  -task task-1 -result result-2 -expected-revision 7
+```
+
+Expected receipt:
+
+```text
+harnessing accept: OK (request req-accept-result, workspace revision 14)
 ```
 
 The `-reviewer owner` flag is load-bearing: `-caller owner` alone does not grant
@@ -261,8 +351,8 @@ The task's important final fields are:
 Task task-1
   Status:     Done
   Assignee:   agent-one
-  Revision:   6
-  ResultID:   result-1
+  Revision:   8
+  ResultID:   result-2
   Reporter:   owner (claimed reporter, unverified)
 ```
 
@@ -306,12 +396,53 @@ Harnessing 101 makes no product-initiated network connection. A real agent tool
 may connect to its configured provider and may send content it can read; you are
 responsible for that tool, its credentials, permissions, and destinations.
 
+## How to read project status and limits
+
+Use the [current Phase 2 ruling](quality/definition-of-done.md#current-phase-2-ruling-2026-09-21)
+for current Phase 2 status. The dated entries below that table are an append-only
+review log: they were true for the revisions reviewed but are historical, not the
+current verdict. Architecture decision records and proposed documents describe
+decisions or intended constraints; by themselves they are not proof that a
+capability ships. The [Phase 3 exit criteria](quality/phase3-exit-criteria.md)
+describe work that must pass before Phase 3 exits, not features this guide claims
+are already available.
+
+**Satisfied with limit** means accepted for the named phase purpose while the
+listed exclusions remain unproved and must not be described as supported
+behaviour. Phase 2 item 3 (interface swappability) has that verdict. G5 is closed;
+G1–G4 and G6–G7 remain. In plain language, the verdict does **not** claim:
+
+- exact CLI punctuation, output stream placement, or the validation substring
+  deny-list as a universal interface contract (G1);
+- that observer events contain exactly one subject and no additional subjects
+  (G2);
+- a universal cursor encoding or expiry after every restart (G3);
+- duplicate-free delivery or exactly one event per workspace revision (G4);
+- mandatory nonempty error detail or a settled precedence between malformed
+  requests and unsupported operations (G6); or
+- that the walkthrough's individual task-revision numbers are architecture
+  rules rather than fixture choreography (G7).
+
+See the [full item 3 ruling](quality/h101-107-phase2-item3-ruling.md#verdict) for
+the evidence and exact boundary. These limits do not change the commands in this
+guide; they prevent a passing walkthrough from being advertised as proof of more
+than it tested.
+
 ## Deliberate limits, not setup bugs
 
 - `SenderAgentID` is an unverified routing claim by design. It may differ from
   `-caller`; neither field proves authorship.
 - Identity verification remains `Unverified` in this phase. Do not interpret a
   display name, sender field, or registration record as authentication.
+- Harnessing 101 does not guarantee that an agent is correct, that its result is
+  safe, or that an acknowledgement means the requested work happened. The human
+  reviewer remains responsible for the acceptance decision.
+- Local records do not make agent file access safe. An agent retains the
+  operating-system permissions of the process you started, and workspace files
+  and messages may contain untrusted instructions or content.
+- Harnessing 101 does not confine agent processes or enforce a provider egress
+  allowlist. An agent may send readable content to destinations allowed by its
+  separately configured tool or provider.
 - Process operations `StartRun`, `StopRun`, and `SetRunBudget` are intentionally
   `Unsupported` in the current product surface, and the CLI exposes no commands
   for them. Phase 3 may implement them later; this guide does not promise that
