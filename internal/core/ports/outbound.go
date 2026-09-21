@@ -13,9 +13,16 @@ import (
 // transaction, the workspace revision counter, and command-replay
 // idempotency (boundaries.md "retries and conflicts"): it looks up
 // (CallerAgentID, RequestID) in a durable receipt ledger before running
-// Mutate. A match with an identical PayloadFingerprint returns the
-// recorded receipt with no new events; a match with a different
-// fingerprint fails Conflict; a request ID is scoped to its caller, so
+// Mutate. A match with an identical PayloadFingerprint creates no new
+// revision, mutation, or event identity: Mutate does not run again, and
+// after required confirmation this returns the ORIGINAL receipt and the
+// ORIGINAL event records from when they were first committed (H101-70
+// ruling, docs/architecture/h101-70-status-replay-observation.md §2) —
+// those returned records are replay data, not a new publication, and
+// every consumer of this return value must tell the two apart rather
+// than treat a replay's events as freshly committed. A match with a
+// different fingerprint fails Conflict; a request ID is scoped to its
+// caller, so
 // replaying someone else's request ID never returns their receipt. Task-
 // level optimistic concurrency (an expectedTaskRevision, the current
 // result ID, reviewer authority) is a domain rule Mutate enforces against

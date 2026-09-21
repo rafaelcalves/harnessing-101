@@ -325,6 +325,14 @@ func cloneTask(t domain.Task) domain.Task {
 		id := *t.CurrentResultID
 		out.CurrentResultID = &id
 	}
+	if t.LastStatusChange != nil {
+		sc := *t.LastStatusChange
+		if t.LastStatusChange.FromStatus != nil {
+			from := *t.LastStatusChange.FromStatus
+			sc.FromStatus = &from
+		}
+		out.LastStatusChange = &sc
+	}
 	return out
 }
 

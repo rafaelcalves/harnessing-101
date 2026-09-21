@@ -43,6 +43,7 @@ const subscriberQueueCapacity = eventBufferCapacity
 // already reflects and includes everything published after, live or not.
 type eventBus struct {
 	mu            sync.Mutex
+	seeded        bool
 	buffer        []domain.Event
 	trimmedUpTo   uint64
 	lastPublished uint64
@@ -56,6 +57,48 @@ type eventSubscriber struct {
 
 func newEventBus() *eventBus {
 	return &eventBus{subscribers: make(map[*eventSubscriber]struct{})}
+}
+
+// ensureFloor seeds trimmedUpTo from the workspace's actual revision,
+// once, on this bus's first real use (H101-71, Stanley's first
+// correctness gap). trimmedUpTo already means "a cursor at or below this
+// cannot be safely resumed from" for buffer eviction; a fresh process's
+// retained history starts at exactly the restored revision too — this
+// process has observed nothing before it — so the SAME field and the
+// SAME CursorExpired check in subscribe cover both an evicted-by-eviction
+// cursor and a stale-by-restart one, without a separate epoch concept.
+// Without this, a fresh eventBus's default trimmedUpTo of zero would let
+// a numeric cursor cached from BEFORE this process started — e.g. by a
+// UI across a host restart — parse fine and be silently accepted, even
+// though this process has no record of what happened between that old
+// revision and now.
+//
+// This is lazy rather than done at NewEngine time deliberately: seeding
+// eagerly at construction would call store.Load before Open otherwise
+// touches the store, so a workspace unreadable for any reason would fail
+// at construction instead of at the first real command — a behavior
+// change to cmd/harnessing's already-established IOFailure-surfacing
+// contract that this card must not make.
+func (b *eventBus) ensureFloor(ctx context.Context, load func(context.Context) (uint64, error)) error {
+	b.mu.Lock()
+	if b.seeded {
+		b.mu.Unlock()
+		return nil
+	}
+	b.mu.Unlock()
+
+	revision, err := load(ctx)
+	if err != nil {
+		return err
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !b.seeded {
+		b.trimmedUpTo = revision
+		b.seeded = true
+	}
+	return nil
 }
 
 // publish appends one commit's events (already stamped with their
@@ -73,14 +116,16 @@ func (b *eventBus) publish(events []domain.Event) {
 
 	// A replayed commit reproduces the SAME WorkspaceRevision as its
 	// original attempt — revision only advances on a fresh Mutate,
-	// never on a replay (StateStore.Commit's own invariant). Some
-	// StateStore implementations hand the original events back on a
-	// replay too (e.g. so a single ResolveRequest-shaped helper can
-	// serve both call sites) even though this port's documented intent
-	// is "no new events" on replay — so dedup here, by revision,
-	// rather than trusting every implementation to return an empty
-	// slice literally. This is what makes "deduplicate replays"
-	// (UI-06) hold regardless of that implementation choice.
+	// never on a replay (StateStore.Commit's own invariant). FileStore
+	// deliberately hands the ORIGINAL event records back on a replay
+	// too, after re-confirming durability (H101-70 ruling: those are
+	// replay data, not a new publication — the store keeps returning
+	// them, the wording that used to claim otherwise was wrong, not
+	// the behavior). This is the one place that draws the line for a
+	// subscriber: dedup by revision, since a replay's revision is
+	// never higher than its original commit's. This is what makes
+	// "deduplicate replays" (UI-06) hold regardless of whether a given
+	// StateStore implementation replays its original events or not.
 	if events[0].WorkspaceRevision <= b.lastPublished {
 		return
 	}

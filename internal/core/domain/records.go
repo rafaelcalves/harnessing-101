@@ -64,6 +64,28 @@ type Task struct {
 	Revision        uint64
 	CurrentResultID *ResultID
 	Provenance      Provenance
+
+	// LastStatusChange is the latest-status evidence boundaries.md's
+	// H101-70 appendix specifies: who reported the most recent actual
+	// status change and when, not a full transition history. It is set
+	// on creation and replaced atomically on every real status change
+	// (generic transition, report, accept, reject); a retry, a denied
+	// command, or any no-op leaves it untouched. Nil means unavailable
+	// — a task record written before this field existed — never
+	// "nothing happened."
+	LastStatusChange *StatusChange
+}
+
+// StatusChange is one task's most recent actual status transition.
+// FromStatus is nil for the creation record (there is no prior status);
+// every later record has one. Provenance uses the same shape as every
+// other claimed-actor record in this codebase — it names who reported
+// the change, not authenticated authorship or observed process activity.
+type StatusChange struct {
+	TaskRevision uint64
+	FromStatus   *TaskStatus
+	ToStatus     TaskStatus
+	Provenance   Provenance
 }
 
 // IdentityVerification names how much a claimed identity was checked. The

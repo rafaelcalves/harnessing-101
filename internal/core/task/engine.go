@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -32,16 +33,39 @@ type CallerScope struct {
 }
 
 // Engine implements the task-lifecycle commands against a StateStore. It
-// holds no state of its own; every call loads-mutates-commits atomically
-// through the store.
+// holds no state of its own beyond the in-process event buffer; every
+// command loads-mutates-commits atomically through the store.
+//
+// commitMu (H101-71, Stanley's second correctness gap) serializes the
+// WHOLE store.Commit-then-publish sequence across concurrent callers of
+// this Engine. FileStore's own lock only serializes store.Commit calls
+// against each other; it says nothing about the order in which their
+// CALLERS go on to publish afterward. Without this, goroutine A committing
+// revision R and goroutine B committing R+1 can have B's publish (for
+// R+1) run before A's (for R) — A returned from store.Commit and was
+// simply not yet scheduled to reach events.publish — and eventBus's
+// high-water dedup then silently drops R as "already superseded." This
+// mutex makes publish order match commit order by construction: whichever
+// goroutine's commit-then-publish sequence starts first finishes first,
+// because no other goroutine's sequence can interleave with it.
 type Engine struct {
 	store       ports.StateStore
 	clock       ports.Clock
 	ids         ports.IDSource
 	workspaceID domain.WorkspaceID
 	events      *eventBus
+	commitMu    sync.Mutex
 }
 
+// NewEngine does not itself seed the event buffer's replay floor: doing
+// that here would call store.Load before Open has otherwise touched the
+// store, and a workspace that is unreadable for any reason (corrupt
+// state, in cmd/harnessing's own IOFailure-rendering test) would then
+// fail at construction instead of at the first real command — a
+// behavior change to an already-established error-surfacing contract
+// this card must not touch. The floor (H101-71, Stanley's first
+// correctness gap) is instead seeded lazily, once, on first real use —
+// see eventBus.ensureFloor and its callers in commit and Subscribe.
 func NewEngine(store ports.StateStore, clock ports.Clock, ids ports.IDSource, workspaceID domain.WorkspaceID) *Engine {
 	return &Engine{store: store, clock: clock, ids: ids, workspaceID: workspaceID, events: newEventBus()}
 }
@@ -54,7 +78,22 @@ func NewEngine(store ports.StateStore, clock ports.Clock, ids ports.IDSource, wo
 // only, so a cursor from a process that is no longer running comes back
 // CursorExpired, not silently empty.
 func (e *Engine) Subscribe(ctx context.Context, afterCursor string) (<-chan domain.Event, error) {
+	if err := e.events.ensureFloor(ctx, e.currentRevision); err != nil {
+		return nil, err
+	}
 	return e.events.subscribe(ctx, afterCursor)
+}
+
+// currentRevision is the eventBus's floor-seeding callback: the
+// workspace's revision as of right now, per the store. Subscribe needs
+// this to answer honestly; a failure here is reported directly rather
+// than defaulting to a wrong floor.
+func (e *Engine) currentRevision(ctx context.Context) (uint64, error) {
+	snap, err := e.store.Load(ctx, e.workspaceID)
+	if err != nil {
+		return 0, err
+	}
+	return snap.Revision, nil
 }
 
 // CreateTaskRequest is version 1's CreateTask payload (boundaries.md
@@ -90,6 +129,7 @@ func (e *Engine) CreateTask(ctx context.Context, caller CallerScope, req CreateT
 			Revision:   1,
 			Provenance: e.claimedProvenance(caller, now),
 		}
+		newTask.LastStatusChange = e.statusChange(caller, now, newTask.Revision, nil, domain.TaskTodo)
 		snap.Tasks = append(snap.Tasks, newTask)
 
 		ev, err := e.event(ctx, "TaskCreated", now, string(req.TaskID))
@@ -157,6 +197,8 @@ func (e *Engine) TransitionTask(ctx context.Context, caller CallerScope, req Tra
 		}
 
 		now := e.clock.WallNow()
+		from := req.FromStatus
+		snap.Tasks[idx].LastStatusChange = e.statusChange(caller, now, snap.Tasks[idx].Revision, &from, req.ToStatus)
 		ev, err := e.event(ctx, "TaskTransitioned", now, string(req.TaskID))
 		if err != nil {
 			return nil, err
@@ -216,8 +258,10 @@ func (e *Engine) ReportTaskResult(ctx context.Context, caller CallerScope, req R
 
 		resultID := req.ResultID
 		snap.Tasks[idx].CurrentResultID = &resultID
+		fromStatus := existing.Status
 		snap.Tasks[idx].Status = domain.TaskAwaitingReview
 		snap.Tasks[idx].Revision++
+		snap.Tasks[idx].LastStatusChange = e.statusChange(caller, now, snap.Tasks[idx].Revision, &fromStatus, domain.TaskAwaitingReview)
 
 		ev, err := e.event(ctx, "TaskResultReported", now, string(req.TaskID), string(req.ResultID))
 		if err != nil {
@@ -262,8 +306,10 @@ func (e *Engine) AcceptTaskResult(ctx context.Context, caller CallerScope, req A
 		snap.TaskResults[resultIdx].Decision = domain.TaskResultAccepted
 		snap.TaskResults[resultIdx].DecisionProvenance = e.claimedProvenance(caller, now)
 
+		fromStatus := domain.TaskAwaitingReview
 		snap.Tasks[taskIdx].Status = domain.TaskDone
 		snap.Tasks[taskIdx].Revision++
+		snap.Tasks[taskIdx].LastStatusChange = e.statusChange(caller, now, snap.Tasks[taskIdx].Revision, &fromStatus, domain.TaskDone)
 
 		ev, err := e.event(ctx, "TaskResultAccepted", now, string(req.TaskID), string(req.ResultID))
 		if err != nil {
@@ -293,8 +339,10 @@ func (e *Engine) RejectTaskResult(ctx context.Context, caller CallerScope, req R
 		snap.TaskResults[resultIdx].DecisionReason = req.Reason
 		snap.TaskResults[resultIdx].DecisionProvenance = e.claimedProvenance(caller, now)
 
+		fromStatus := domain.TaskAwaitingReview
 		snap.Tasks[taskIdx].Status = domain.TaskDoing
 		snap.Tasks[taskIdx].Revision++
+		snap.Tasks[taskIdx].LastStatusChange = e.statusChange(caller, now, snap.Tasks[taskIdx].Revision, &fromStatus, domain.TaskDoing)
 
 		ev, err := e.event(ctx, "TaskResultRejected", now, string(req.TaskID), string(req.ResultID))
 		if err != nil {
@@ -333,6 +381,21 @@ func (e *Engine) GetSnapshot(ctx context.Context) (domain.Snapshot, error) {
 	return cloneSnapshot(snap), nil
 }
 
+// cloneStatusChange deep-copies H101-70's latest-status record, including
+// its own FromStatus pointer, so a query result can never let a caller
+// reach — or corrupt — the stored record via a shared pointer.
+func cloneStatusChange(sc *domain.StatusChange) *domain.StatusChange {
+	if sc == nil {
+		return nil
+	}
+	out := *sc
+	if sc.FromStatus != nil {
+		from := *sc.FromStatus
+		out.FromStatus = &from
+	}
+	return &out
+}
+
 func cloneSnapshot(snap domain.Snapshot) domain.Snapshot {
 	out := snap
 	out.Agents = append([]domain.Agent{}, snap.Agents...)
@@ -348,6 +411,7 @@ func cloneSnapshot(snap domain.Snapshot) domain.Snapshot {
 			id := *snap.Tasks[i].CurrentResultID
 			out.Tasks[i].CurrentResultID = &id
 		}
+		out.Tasks[i].LastStatusChange = cloneStatusChange(snap.Tasks[i].LastStatusChange)
 	}
 	out.TaskResults = append([]domain.TaskResult{}, snap.TaskResults...)
 	for i := range out.TaskResults {
@@ -772,6 +836,20 @@ func findResult(snap *domain.Snapshot, id domain.ResultID) (int, domain.TaskResu
 // carries. IdentityVerification is always Unverified in this phase: see
 // the type's doc comment on why that is not a gap to "fix" later without
 // a real verification mechanism.
+// statusChange builds one H101-70 latest-status record. from is nil only
+// for creation; every real transition after that passes the status the
+// task was actually leaving. Callers set this on the SAME task struct
+// whose Revision they just advanced, inside the same Mutate closure, so
+// it lands in the same commit as the change it describes.
+func (e *Engine) statusChange(caller CallerScope, now time.Time, taskRevision uint64, from *domain.TaskStatus, to domain.TaskStatus) *domain.StatusChange {
+	return &domain.StatusChange{
+		TaskRevision: taskRevision,
+		FromStatus:   from,
+		ToStatus:     to,
+		Provenance:   e.claimedProvenance(caller, now),
+	}
+}
+
 func (e *Engine) claimedProvenance(caller CallerScope, now time.Time) domain.Provenance {
 	return domain.Provenance{
 		ClaimedAgentID:       caller.AgentID,
@@ -796,6 +874,21 @@ func (e *Engine) event(ctx context.Context, kind string, at time.Time, subjects 
 }
 
 func (e *Engine) commit(ctx context.Context, caller CallerScope, requestID domain.RequestID, fp string, mutate func(*domain.Snapshot) ([]domain.Event, error)) (domain.Receipt, error) {
+	// commitMu (see Engine's doc comment) holds this whole sequence —
+	// store.Commit through publish — so no other goroutine's commit can
+	// publish out of order in between.
+	e.commitMu.Lock()
+	defer e.commitMu.Unlock()
+
+	// Best-effort floor seeding: if this is the first real use of this
+	// bus, try to establish the restart floor before this commit's own
+	// event might get published. A failure here is deliberately
+	// swallowed — store.Commit below performs its own Load and will
+	// surface the identical failure through the normal command error
+	// path (e.g. cmd/harnessing's IOFailure rendering); reporting the
+	// same read failure a second time here would only be noise.
+	_ = e.events.ensureFloor(ctx, e.currentRevision)
+
 	receipt, events, err := e.store.Commit(ctx, e.workspaceID, ports.CommitRequest{
 		CallerAgentID:      caller.AgentID,
 		RequestID:          requestID,
@@ -805,10 +898,15 @@ func (e *Engine) commit(ctx context.Context, caller CallerScope, requestID domai
 	if err != nil {
 		return receipt, err
 	}
-	// A replay of an already-recorded request returns its original
-	// receipt with no new events (StateStore's own contract) — publish
-	// only ever sees fresh commits, so replays cannot duplicate an
-	// event a subscriber already saw.
+	// A replay of an already-recorded request creates no new revision,
+	// mutation, or event identity — but StateStore.Commit still hands
+	// this call the ORIGINAL event records after confirming durability
+	// (H101-70 ruling: that is replay data, not a new publication, and
+	// this call is not the one that gets to assume it never sees it).
+	// events.publish is what actually keeps a replay from being
+	// delivered as though newly committed: it dedups by revision, and
+	// a replay's WorkspaceRevision is never higher than the original
+	// commit's, because revision only advances on a fresh Mutate.
 	if len(events) > 0 {
 		stamped := make([]domain.Event, len(events))
 		for i, ev := range events {
