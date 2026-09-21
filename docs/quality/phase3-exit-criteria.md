@@ -152,12 +152,16 @@ profile's documented mechanism, (3) emits an observable participation signal
 `Starting`→`Running`, context present, and R3 negative cases with the fixture.
 **A `sleep`/`cat` profile cannot discharge Layer A.**
 
-**Layer B — real agentic CLI (per target, before Phase 3 exit):** Record a
-**native manifest** (same class as darwin-arm64 milestone) for at least **one**
-owner-named agentic CLI per ADR target (`linux/amd64`, `darwin/arm64`), **or**
-an **owner-documented deferral** for that target/tool pair. Manifest must show:
-managed start through the product (not manual shell), authenticated tool state,
-context supplied, and honest handling when auth or launch fails.
+**Layer B — real agentic CLI (per target, before Phase 3 exit):** **Amended
+H101-153** — requires a committed **runner script** (owner's demo/dev script) that
+produces a **manifest as output**, plus one **compatibility descriptor** per
+named tool (or deferral entry). See
+[`h101-153-phase3-item1-layerb-refinements.md`](h101-153-phase3-item1-layerb-refinements.md).
+At least **one** owner-named agentic CLI per ADR target (`linux/amd64`,
+`darwin/arm64`) must have runner-produced manifest, **or** owner-documented
+deferral in descriptor format. Hand-written manifests do not count. Manifest must
+show: managed start through the product (not manual shell), authenticated tool
+state, context supplied, and honest handling when auth or launch fails.
 
 **CI cannot require live provider network.** Claudio H101-141: installed Claude
 Code blocked at `api.anthropic.com:443` in the hive environment — a clean
@@ -178,6 +182,18 @@ deferral before release claims that tool.
 | D11 | Installed tool on `PATH` starts without profile approval | **Product** | R5 — installed ≠ approved |
 | D12 | Spawn before dispatch-attempted marker durable, or duplicate Start on replay | **Product** | H101-135 violation |
 | D13 | Layer B claimed from manual shell start or spike without managed `StartRun` | **Evidence** | Manifest must use product path |
+| D14 | Layer B manifest hand-written or edited without runner output | **Evidence** | H101-153 — runner produces manifest |
+| D15 | No committed documented runner for Layer B | **Evidence** | H101-153 — script required |
+| D16 | New agentic CLI would need hardcoded start-path branch | **Product** | H101-153 — descriptor extensibility |
+| D17 | Runner substitutes for Layer A participation fixture in CI | **Test** | Fixture only in CI |
+
+### H101-153 Layer B refinements (2026-09-21)
+
+**Refinement 1:** runner script **required**; manifest is runner output only.
+**Refinement 2:** descriptor-per-tool schema **required**; extensibility proved
+by schema+loader (not a fourth tool). Descriptor field schema waits for Stanley
+ruling on Claudio's proposal; principle fixed now. Full ruling:
+[`h101-153-phase3-item1-layerb-refinements.md`](h101-153-phase3-item1-layerb-refinements.md).
 
 ### Estimate implication
 
