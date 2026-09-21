@@ -55,3 +55,21 @@ Status: **Proposed for review**, 2026-09-19. Author: Stanley, Architect. Card: H
 **INFERENCE.** This adds an error variant and a recovery operation to the evolving version 1 application contract; it does not weaken UI-02. Coordinate their implementation before marking uncertainty handling complete. Until all producers are migrated, an unclassified IOFailure from a mutating request must be presented conservatively as unconfirmed; clients must not parse detail to decide whether it rolled back. Unknown future error codes likewise never imply successful completion.
 
 **INFERENCE.** No statestore, UI, or existing ADR was edited for this ruling. Follow-up work must reconcile boundaries.md and API declarations after acceptance. Revisit when distributed/remote effects, bounded receipt retention, or independent actors changing the same storage invalidate the current caller-scoped atomic state/receipt assumptions. This taxonomy describes what is known; it cannot manufacture durability or guarantee an operation's eventual completion.
+
+## H101-62 clarification — port placement and recovery policy (2026-09-21)
+
+**INFERENCE — ruling.** “Ten ports unchanged” means the ten roles (four inbound, six outbound), not frozen method sets. Add `ResolveRequest(ctx, workspaceID, callerAgentID, requestID) -> (Receipt, error)` to the existing outbound **StateStore** port. Receipt lookup and serialized durability confirmation are persistence responsibilities. Expose caller-bound `ResolveRequest(requestID)` through the application query/recovery wrapper; it supplies workspace/caller from trusted session context. No eleventh port and no concrete FileStore access from the UI are required. This is a deliberate interface extension: update its implementations/test doubles and caller-facing contract, not the command state machine.
+
+**INFERENCE — authority qualification.** A caller/request ledger key isolates lookup namespaces; it does not authenticate the callerAgentID argument. The trusted wrapper must bind that argument. Returning NotFound for a request absent in the bound caller's namespace, including another principal's private record, is acceptable. Here NotFound implements Absent: “no record found now,” never “the operation never happened.” Unreadable state or failed confirmation must not become NotFound.
+
+**INFERENCE — no additional action field.** Stable codes and enum values are sufficient inputs to a deterministic client policy. Documentation defines their semantics; that is different from parsing runtime Detail text. No `nextAction` field is required, and an error alone must not authorize retries of unrelated external effects.
+
+| Structured result | Caller policy |
+| --- | --- |
+| OutcomeUncertain, Applied/Durability | Retain original ID/payload; resolve that request; display applied but durability unconfirmed. |
+| OutcomeUncertain, Unknown/Outcome | Retain original ID/payload; resolve that request; display outcome unknown. Do not issue a new command automatically. |
+| Resolve returns confirmed receipt | Report confirmation; do not repeat the mutation. |
+| Resolve returns NotFound | Report no current receipt. Only after authoritative recovery, an explicit identical same-ID resubmission is allowed for core-only atomic state/receipt changes; external effects still require their own reconciliation. |
+| Resolve remains uncertain, fails, or returns an unfamiliar combination | Preserve uncertainty and stop automatic follow-on work; never infer rollback or permission to repeat. |
+
+**INFERENCE — verification scope.** Tests should vary Detail while holding code/enums fixed and assert unchanged client behavior, including Unknown/Outcome. No code was changed for this clarification. If a future protocol needs server-directed recovery negotiation, revisit an action field then; it would still require policy validation rather than blind execution.
