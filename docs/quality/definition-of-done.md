@@ -66,8 +66,8 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 
 | # | Criterion | Checkable today? |
 | --- | --- | --- |
-| 1 | CLI product cycle (§2 walkthrough) | **No** — write commands exist (`3659e6a`); `run()` cycle test is scaffold only — subprocess §2 walkthrough still required |
-| 2 | Restart after crash | **Partially** — linux crash-reopen with state (`f242b2b`); handoff proof via host only (H101-58); darwin manifest still needed |
+| 1 | CLI product cycle (§2 walkthrough) | **Partially** — linux subprocess §2 walkthrough (`737d453`, `TestCLI_Phase2ProductWalkthroughSubprocess`); darwin manifest pending (H101-55); §2 follow-ups: pending-message list, reporter per status |
+| 2 | Restart after crash | **Partially** — linux crash-reopen with state (`f242b2b`); handoff visibility now CLI-provable (`message`); crash test still uses host for ack survival; darwin manifest still needed |
 | 3 | Swappability (ADR 0003 UI-01–08) | **No** — `GetSnapshot`/`FrontendSession` (`d906a9c`); UI-06 subscription gap; no `adaptercontract` suite or second adapter |
 | 4 | Containment preserved | **Partially** — store half satisfied (`24a2022`); UI import allowlist (no host from presentation) not yet enforced |
 | 5 | Mailbox adapter (H101-22) | **No** — needs file mailbox wired to delivery-fact recorders |
@@ -1250,3 +1250,85 @@ Reviewed commit `45cc821` (replay durability + `OutcomeUncertain` taxonomy). Re-
 - Propagate `OutcomeUncertain` through host → CLI; retire IOFailure-based UNCERTAIN rendering when migrated.
 - Put `ResolveRequest` on the port when Stanley rules (already deferred).
 - Engine/host migration tests per ADR 0004 consequences section.
+
+---
+
+## H101-65 / H101-58 acceptance review (2026-09-21)
+
+Reviewed commit `737d453` (`harnessing message <id>`, walkthrough unskipped). Re-ran `go test -count=1 ./cmd/harnessing/ -run TestCLI_Phase2ProductWalkthroughSubprocess` — pass (1.48s, real `go build` binary, every step `exec.Command`).
+
+**Verdict: ACCEPTED**
+
+**H101-58 is no longer exit-blocking.** Acknowledged handoff is now visible through `harnessing message` on the product surface, not only via `host.GetSnapshot` in tests.
+
+### Item 1 — does it discharge?
+
+**Yes on linux/amd64** — the subprocess walkthrough criterion that item 1 anchors to is met where CI runs the test.
+
+**Not flat across both ADR 0001 targets.** Per H101-55, **darwin/arm64** still needs native milestone evidence (manifest or macOS runner) before quoting item 1 as fully discharged on every supported platform. Same class of caveat as item 2.
+
+**Item 1 overall: PARTIALLY SATISFIED** until darwin native proof is recorded.
+
+### What the walkthrough covers (item 1 checklist)
+
+| Item 1 requirement | Covered? | Evidence |
+| --- | --- | --- |
+| Subprocess `harnessing` only | **Yes** | `buildAndRunCLI` / `exec.Command`; no test-package `host` import |
+| Create/open workspace | **Yes** | `-workspace` on every invocation; implicit open |
+| ≥2 named agents | **Yes** | `engineer`, `analyst` registered |
+| Task with accountable owner | **Yes** | `t1` assignee `engineer` |
+| Task-linked handoff + ack | **Yes** | `send` + `ack`; `message m1` asserts ack + four facts |
+| Blocker report and resolve | **Yes** | `Blocked` → `Doing` |
+| Report, human reject, accept replacement | **Yes** | `res1` rejected, `res2` accepted; `Denied:` prefix asserted |
+| Status queries (assigned / in-progress / blocked / awaiting-review) | **Yes** | `status()` asserts Todo, Doing, Blocked, AwaitingReview, Done |
+| Reporter identity on status | **No** | `task` shows Assignee + `Created by` provenance only — not who reported Blocked/AwaitingReview |
+| Close CLI; reopen without resending | **Yes** | Each command is an independent process; final `task` in fresh invocation |
+| Durable records | **Yes** | `ResultID: res2` after reopen |
+
+### §2 pass (god Q1) — reachable steps Claudio may have written off
+
+Compared to [`definition.md`](../product/definition.md) §2, not only the test's original shape:
+
+| §2 element | In walkthrough? | Notes |
+| --- | --- | --- |
+| Complete assign → handoff → blocker → review cycle | **Yes** | Core cycle |
+| See whether message was recorded or acknowledged | **Yes** | `message` after ack |
+| Inspect **pending** messages (plural / before ack) | **No** | No list command; no pre-ack query |
+| One status view with reporter + last update per state | **Partial** | Repeated `task`, not aggregate view; reporter/last-update gaps |
+| See how to connect existing sessions | **No** | Onboarding/docs — not in item 1 checklist |
+| Restart of the interface | **Yes** | Per-invocation close; not SIGKILL (item 2) |
+| Named external agent tool | **N/A** | Explicitly not Phase 2 exit |
+
+**Follow-up (non-blocking for item 1 discharge):** pending-message inspection and per-status reporter/last-update on `task` output align §2 prose with what item 1 already names ("reporter identity").
+
+### God Q2 — `(absent)` for missing timestamps
+
+**Sufficient for UI-05.** A visible `(absent)` token states the fact has not been observed — it cannot be mistaken for a zero time that implies occurrence. Stronger prose ("has not occurred") is optional polish, not a discharge requirement.
+
+### God Q3 — unverified-sender prose is load-bearing
+
+**Valid concern; follow-up recommended, not blocking.**
+
+The test asserts a long parenthetical on the `Sender:` line. The `Recorded by:` line already exposes `IdentityVerification` as a separate field (`identity unverified`). **Prefer asserting on that stable field** (same pattern as H101-63 UI-02 field assertions) rather than the `Sender:` parenthetical alone. Rewording the human label should not break the contract.
+
+### God Q4 — UI-02 at CLI surface
+
+**Not closed.** H101-64 must propagate `OutcomeUncertain` through host → CLI before UI-02 is credited at the product surface. This commit does not change that.
+
+### Item 2 delta from H101-58 landing
+
+Handoff **visibility** in a product walkthrough is now CLI-provable. Item 2's **crash** test (`f242b2b`) still proves acknowledged-handoff survival via `host.GetSnapshot` — update that test to use `harnessing message` when convenient; not required to accept H101-58.
+
+### Nine exit items — owner-ready standing (2026-09-21)
+
+| # | Standing |
+| --- | --- |
+| 1 | **Partially satisfied** — linux/amd64 subprocess §2 walkthrough passes in CI; darwin/arm64 native evidence pending (H101-55); minor §2 follow-ups |
+| 2 | **Partially satisfied** — linux crash-reopen with task/result state; handoff CLI-visible but crash proof still host-side for ack; darwin pending |
+| 3 | **Not satisfied** — no `adaptercontract` suite + second adapter; UI-06 subscription gap (H101-61) |
+| 4 | **Partially satisfied** — store-import yes; UI import allowlist not enforced |
+| 5 | **Not satisfied** — mailbox H101-22 not wired to delivery-fact recorders |
+| 6 | **Satisfied** — first-run disclosure (`1eda92b`) |
+| 7 | **Not satisfied** — Phase 3 ops `Unsupported` surface |
+| 8 | **Satisfied** — zero network on CLI tree |
+| 9 | **N/A** — test layering policy |
