@@ -47,6 +47,14 @@ func mustCode(t *testing.T, err error, want domain.ErrorCode) {
 
 func createDoingTask(t *testing.T, ctx context.Context, caps host.Capabilities, taskID domain.TaskID) {
 	t.Helper()
+	// Fixed RequestID: a second call within the same test (a different
+	// taskID, the same caps) replays this identical payload rather than
+	// hitting "agentID already registered" Conflict.
+	if _, err := caps.RegisterAgent(ctx, engineerID, task.RegisterAgentRequest{
+		RequestID: "req-register-engineer", AgentID: engineerID, DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
 	if _, err := caps.CreateTask(ctx, engineerID, task.CreateTaskRequest{
 		RequestID: domain.RequestID("req-create-" + string(taskID)), TaskID: taskID, Title: "do it", AssigneeID: engineerID,
 	}); err != nil {

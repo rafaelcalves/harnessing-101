@@ -22,6 +22,11 @@ func TestCapabilities_GetTask_LastStatusChangeIsDetached(t *testing.T) {
 	defer func() { _ = caps.Close() }()
 	ctx := context.Background()
 
+	if _, err := caps.RegisterAgent(ctx, "engineer", task.RegisterAgentRequest{
+		RequestID: "reg-r1", AgentID: "engineer", DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
 	if _, err := caps.CreateTask(ctx, "engineer", task.CreateTaskRequest{
 		RequestID: "r1", TaskID: "t1", Title: "x", AssigneeID: "engineer",
 	}); err != nil {

@@ -84,6 +84,11 @@ func seedTask(t *testing.T, dir string, taskID domain.TaskID) {
 	defer func() { _ = caps.Close() }()
 
 	ctx := context.Background()
+	if _, err := caps.RegisterAgent(ctx, "engineer", task.RegisterAgentRequest{
+		RequestID: "req-seed-register", AgentID: "engineer", DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
 	if _, err := caps.CreateTask(ctx, "engineer", task.CreateTaskRequest{
 		RequestID: "req-seed", TaskID: taskID, Title: "seeded task", AssigneeID: "engineer",
 	}); err != nil {
