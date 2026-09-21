@@ -68,7 +68,7 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 | --- | --- | --- |
 | 1 | CLI product cycle (§2 walkthrough) | **No** — subprocess walkthrough passes (`3d118cc`); surface gaps closed (H101-68); **domain gap**: transition actor/timestamp not persisted for Doing/Blocked; darwin manifest pending (H101-55) |
 | 2 | Restart after crash | **Partially** — linux crash-reopen with state (`f242b2b`); handoff visibility now CLI-provable (`message`); crash test still uses host for ack survival; darwin manifest still needed |
-| 3 | Swappability (ADR 0003 UI-01–08) | **No** — `GetSnapshot`/`FrontendSession` (`d906a9c`); UI-06 subscription gap; no `adaptercontract` suite or second adapter |
+| 3 | Swappability (ADR 0003 UI-01–08) | **No** — subscription/replay landed (`49d9d84`) but UI-06 not proven (restart cursor + publish-order gaps, H101-70); no `adaptercontract` suite or second adapter |
 | 4 | Containment preserved | **Partially** — store half satisfied (`24a2022`); UI import allowlist (no host from presentation) not yet enforced |
 | 5 | Mailbox adapter (H101-22) | **No** — needs file mailbox wired to delivery-fact recorders |
 | 6 | First-run disclosure (H101-16) | **Satisfied** — every invocation, stderr, ADR 0002 sentence, CI tests (`1eda92b`) |
@@ -969,7 +969,7 @@ Both adapters run the **same** `internal/adaptercontract` scenarios through **re
 | **UI-03** | Same `request-id` retry → identical receipt; changed payload → Conflict. No silent new-ID retry after uncertain mutation. **Generated entity IDs** surfaced on create so interrupted caller can recover (stdout or documented field). | **No** — write commands (H101-51); caller `-request-id` design exists uncommitted |
 | **UI-04** | Full cycle: register ≥2 agents, task, blocker, linked message + ack, report, reject, accept — identical domain outcomes. `AwaitingReview` ≠ `Done`. Wrong principal → Denied, state unchanged. | **No** — needs session surface + mutations via CLI/throwaway |
 | **UI-05** | Provenance fields visible; four message delivery facts including **absent** facts; ADR 0002 disclosure present; no validation badges on manual content. | **Partially** — disclosure on every run (`1eda92b`); delivery facts + provenance rendering need mailbox + write path |
-| **UI-06** | **No injected entity IDs** for first overview: discover fixture via `GetSnapshot`, then observe from returned cursor through concurrent change (other adapter or helper). `CursorExpired` → reload. Snapshot refresh not presented as full event history. Detachment/mutation probe per ADR §detachment proof. | **No** — `GetSnapshot` not implemented (H101-52) |
+| **UI-06** | **No injected entity IDs** for first overview: discover fixture via `GetSnapshot`, then observe from returned cursor through concurrent change (other adapter or helper). **`CursorExpired` → reload** — must include **host restart with stale cursor** (empty replay floor), not only buffer eviction. **Commit/publication ordering** — must include **concurrent commits where R+1 can publish before R** (goroutine interleaving within single writer), not only publish-vs-subscribe race. Deduplicate replays; snapshot refresh not presented as full event history. Detachment/mutation probe per ADR §detachment proof. Two sessions on same host (ADR H101-70 — durable cross-process log not required). | **No** — implementation gaps per H101-70 (`2e72fd7`); suite not built |
 | **UI-07** | Detach/replace UI does not close other session or cancel work. **Graceful** reopen retains records + request-id replay. | **No** — needs session detach + multi-session test |
 | **UI-08** | Returned view values detached (mutation probe on nested data does not persist). Unsupported ops → consistent `Unsupported`. Run output stream separate from domain events (fake stream tests excluded from item 3 verdict). | **No** — needs snapshot detachment tests + Phase 3 `Unsupported` surface |
 
@@ -1461,3 +1461,34 @@ Unchanged. Even after transition provenance, **linux/amd64 discharge is separate
 | 7 | **Not satisfied** — Phase 3 ops `Unsupported` surface |
 | 8 | **Satisfied** — zero network on CLI tree |
 | 9 | **N/A** — test layering policy |
+
+---
+
+## H101-70 inform — UI-06 assessment correction (2026-09-21)
+
+**Context:** God informs Stanley's ruling `2e72fd7` contests H101-69's UI-06 assessment. Kevin's subscription/replay (`49d9d84`) passes its tests, but Stanley found two source-level gaps: (1) fresh event bus accepts stale cursor after restart instead of `CursorExpired`; (2) store commit and event publish are not serialized — R+1 can publish before R and R is dropped by high-water dedup. Same-host multi-session observation is sufficient (no durable cross-process log). H101-71 with Kevin for status record (item 1), port-comment fix, and stream gaps.
+
+### God question — must item 3 / UI-06 assertions name restart and concurrent-commit explicitly?
+
+**Yes.** Same class as substring fragility and H101-58-style holes: a check that is true about what it measures and silent about what it does not.
+
+| Gap | What passing tests covered | What they did not |
+| --- | --- | --- |
+| Stale cursor after restart | Buffer eviction → `CursorExpired` | Fresh `EventBus` with no replay floor accepts old numeric cursor against empty buffer |
+| Publication ordering | Publish vs subscribe race | Goroutine interleaving: `Commit` returns then `publish` — R+1 can publish before R, R dropped by `<= lastPublished` |
+
+Without named scenarios in the H101-53 assertion table (updated above), a future implementation can pass the same suite and retain the same holes. **Item 3 cannot credit UI-06 until the contract suite exercises both cases** — per ADR 0003 §stream semantics as amended in H101-70.
+
+### H101-69 correction
+
+H101-69 said enumeration-via-snapshot satisfies UI-06 discovery half and subscription/replay completes the remainder. **Revised:** discovery half stands for item 1 (`messages`); **UI-06 as a whole is not proven** by `49d9d84` until restart-cursor and commit/publication-order obligations are fixed and contract-tested. Item 3 unchanged: **not satisfied**.
+
+### Informational (no Kelly action on code)
+
+| Stanley ruling (`2e72fd7`) | Effect |
+| --- | --- |
+| `Task.LastStatusChange` — latest transition provenance | Unblocks item 1 domain gap (H101-69); H101-71 with Kevin |
+| Replay returns original records; comments corrected | Consumer must not treat replay data as new publication — contract tests must assert distinction |
+| Same-host multi-session observation sufficient | Closes architecture ceiling Kevin flagged; does not prove current implementation |
+
+H101-55 darwin manifest: still open, unchanged.
