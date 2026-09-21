@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"runtime"
 	"strings"
 	"testing"
@@ -98,19 +97,31 @@ func TestRun_Phase2CycleRecoversAfterKilledCLI(t *testing.T) {
 		t.Fatalf("reopened CLI lost the reported result: %q", taskOutput)
 	}
 
-	// The task command does not expose message history, so inspect the same
-	// reopened workspace through the composition query solely to verify the
-	// acknowledged handoff survived alongside the CLI-visible task state.
-	caps, err := host.Open(dir, wsID, nil)
-	if err != nil {
-		t.Fatalf("host reopen after CLI query: %v", err)
+	// H101-104/H101-112: the acknowledged handoff's survival is proved
+	// through the same product surface the §2 walkthrough uses post-reopen
+	// (harnessing message), not through an in-process host.GetSnapshot
+	// query — that in-test host import is only a platform probe and the
+	// Busy negative control above, never an assertion of ack survival
+	// (Kelly's h101-104-cross-target-ack-survival.md, D8/D11).
+	var messageOut, messageErrOut bytes.Buffer
+	if code := run([]string{"message", "-workspace", dir, "-workspace-id", wsID, "m1"}, &messageOut, &messageErrOut); code != 0 {
+		t.Fatalf("message query after CLI crash recovery: exit=%d stdout=%s stderr=%s", code, messageOut.String(), messageErrOut.String())
 	}
-	defer func() { _ = caps.Close() }()
-	snapshot, err := caps.GetSnapshot(context.Background())
-	if err != nil {
-		t.Fatalf("snapshot after CLI crash recovery: %v", err)
+	msg := messageOut.String()
+	for _, want := range []string{
+		"Acknowledged:", "by reviewer1", "Task:        t1",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("message output after crash recovery missing %q: %s", want, msg)
+		}
 	}
-	if len(snapshot.Messages) != 1 || snapshot.Messages[0].AcknowledgedBy != "reviewer1" || snapshot.Messages[0].AcknowledgedAt == nil {
-		t.Fatalf("acknowledged handoff did not survive CLI crash recovery: %+v", snapshot.Messages)
+	for _, field := range []string{"  Queued:", "  Published:", "  Processed:"} {
+		value := outputField(msg, field)
+		if value == "" || value == "(absent)" {
+			t.Fatalf("message output after crash recovery missing delivered timestamp for %q: %s", field, msg)
+		}
+		if _, err := time.Parse(time.RFC3339Nano, value); err != nil {
+			t.Fatalf("message output timestamp %q for %q is not RFC3339 after crash recovery: %v", value, field, err)
+		}
 	}
 }
