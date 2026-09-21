@@ -66,9 +66,9 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 
 | # | Criterion | Checkable today? |
 | --- | --- | --- |
-| 1 | CLI product cycle (§2 walkthrough) | **No** — subprocess walkthrough passes (`3d118cc`); surface gaps closed (H101-68); **domain gap**: transition actor/timestamp not persisted for Doing/Blocked; darwin manifest pending (H101-55) |
+| 1 | CLI product cycle (§2 walkthrough) | **No** — subprocess walkthrough passes; `LastStatusChange` in domain (`3a4d320`) but CLI `task` still prints unavailable for Doing/Blocked; darwin manifest pending (H101-55) |
 | 2 | Restart after crash | **Partially** — linux crash-reopen with state (`f242b2b`); handoff visibility now CLI-provable (`message`); crash test still uses host for ack survival; darwin manifest still needed |
-| 3 | Swappability (ADR 0003 UI-01–08) | **No** — subscription/replay landed (`49d9d84`) but UI-06 not proven (restart cursor + publish-order gaps, H101-70); no `adaptercontract` suite or second adapter |
+| 3 | Swappability (ADR 0003 UI-01–08) | **No** — engine UI-06 scenarios fixed (`3a4d320`); no `adaptercontract` suite or second adapter |
 | 4 | Containment preserved | **Partially** — store half satisfied (`24a2022`); UI gate enforced (`306c6fa`) except documented `cmd/harnessing` interim exception until `FrontendSession` migration |
 | 5 | Mailbox adapter (H101-22) | **No** — needs file mailbox wired to delivery-fact recorders |
 | 6 | First-run disclosure (H101-16) | **Satisfied** — every invocation, stderr, ADR 0002 sentence, CI tests (`1eda92b`) |
@@ -1543,3 +1543,77 @@ Already answered (`503fb21` / H101-70 inform). UI-06 assertions now name restart
 | # | Standing |
 | --- | --- |
 | 4 | **Partially satisfied** — store-import yes; UI import gate enforced except interim `cmd/harnessing` exception pending `FrontendSession` migration |
+
+---
+
+## H101-55 reaffirmation (2026-09-21, prerequisite to H101-76)
+
+**Unchanged.** Darwin/arm64 native milestone evidence still not recorded — no macOS CI runner, no written manifest with commit, exact macOS build, commands, and outputs. Undisclosed laptop runs do not discharge.
+
+Linux/amd64 CI evidence stands for tests that run there. **Item 1 linux discharge is separate from darwin** — even when item 1 clears on linux, quote platform scope explicitly per H101-55.
+
+---
+
+## H101-76 / H101-71 acceptance review (2026-09-21)
+
+Reviewed commit `3a4d320` (`LastStatusChange`, restart cursor floor, publish-in-commit-order). Re-ran named tests with `-race` — pass. Walkthrough subprocess test — pass.
+
+**Verdict: ACCEPTED WITH FOLLOW-UP**
+
+### Item 1 — does it discharge?
+
+**No. Still NOT SATISFIED on any platform** (including linux/amd64).
+
+| Layer | Status |
+| --- | --- |
+| Domain `LastStatusChange` | **Satisfied** — five real transition points including reject/reopen; replay and denied attempts do not advance it (`TestLastStatusChange_ReplayAndDenialDoNotAdvanceIt`) |
+| Composition detachment | **Satisfied** — `TestCapabilities_GetTask_LastStatusChangeIsDetached` through `host.cloneTask` (correct test placement) |
+| **CLI product surface** | **Not satisfied** — `cmd/harnessing/task.go` still prints `(unavailable; status-update provenance is not recorded)` for Doing/Blocked; does not read `LastStatusChange` |
+| Walkthrough | **Not satisfied** — `status()` asserts `Status:` only; never asserts reporter during Blocked/Doing |
+
+Same shape as H101-58: domain fix without product walkthrough proof does not discharge item 1. **Follow-up:** wire `LastStatusChange` into `printTask`; assert reporter + last-update (with `identity unverified`) on at least one Blocked step in `TestCLI_Phase2ProductWalkthroughSubprocess`.
+
+**Darwin (H101-55):** unchanged — linux progress does not flatten platform scope.
+
+### Item 3 — what moves?
+
+| UI-06 engine scenario (H101-70) | Status |
+| --- | --- |
+| Stale cursor after restart → `CursorExpired` | **Satisfied** — `TestSubscribe_RestartCursorIsExpired`; overcorrection guarded by `TestSubscribe_RestartThenFreshSnapshotCursorWorks` |
+| Concurrent commits publish in order | **Satisfied** — publication inside commit critical section; `TestEngine_ConcurrentCommitsPublishInOrder` (50 goroutines, `-race`) |
+
+**Item 3 overall: still NOT SATISFIED.** Engine implementation gaps for the two named scenarios are closed; **adaptercontract suite + second adapter remain required** for discharge. Item 3 moves from "UI-06 not proven at engine" to "UI-06 engine obligations met; contract suite outstanding."
+
+Kevin's corrected invariant (verbatim for board): *publish and subscribe share one mutex's critical section AND all commits publish in commit order, so no committed event can be missed by a subscriber whose cursor is at or after that event's predecessor.*
+
+### Multi-event commit checkpointing — acceptable disposition?
+
+**Yes, for Phase 2 — with a recorded future obligation.**
+
+Kevin's finding is real at the type level (`Mutate` may return multiple events) but **unreachable through any current engine command** (every closure returns exactly one event, confirmed by inspection). Disposition:
+
+| | Ruling |
+| --- | --- |
+| Fix required now? | **No** — no path to reach the failure |
+| Proof required now? | **Yes** — `TestEventBus_MultiEventCommitIsDeliveredWhole` documents the property holds by construction (whole `events` slice under one publish lock) |
+| Future obligation | If a command ever returns multiple events per commit, **whole-commit delivery must be demonstrated** before crediting that path — criterion carries the scenario without requiring an unverifiable fix today |
+
+Same principle god applied to Kevin: a criterion naming a scenario nobody has observed failing must not gain a fix nobody can verify. **Held-by-construction + documented invariant is acceptable**; item 3 does not need the path made reachable solely to prove it.
+
+### gofmt CI step (god finding)
+
+**Recommended follow-up, not exit-blocking.** Same shape as zero-network before it became CI: agents run locally, habit not guard. Worth a lightweight `gofmt -l` (or `gofmt -s -w` check) CI step — **not** a Phase 2 exit item unless owner wants hygiene gates enumerated.
+
+### Nine exit items — owner-ready standing (2026-09-21)
+
+| # | Standing |
+| --- | --- |
+| 1 | **Not satisfied** — domain `LastStatusChange` yes; CLI/walkthrough reporter on Doing/Blocked still open; darwin pending |
+| 2 | **Partially satisfied** — linux crash-reopen; darwin pending |
+| 3 | **Not satisfied** — UI-06 engine scenarios met; adaptercontract + second adapter still needed |
+| 4 | **Partially satisfied** — UI gate except `cmd/harnessing` exception |
+| 5 | **Not satisfied** — mailbox H101-22 |
+| 6 | **Satisfied** |
+| 7 | **Not satisfied** |
+| 8 | **Satisfied** |
+| 9 | **N/A** |
