@@ -7,8 +7,8 @@ import (
 
 	"github.com/rafaelcalves/harnessing-101/internal/adapters/statestore"
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
-	"github.com/rafaelcalves/harnessing-101/internal/core/task"
 	"github.com/rafaelcalves/harnessing-101/internal/core/ports"
+	"github.com/rafaelcalves/harnessing-101/internal/core/task"
 )
 
 var _ = task.CallerScope{}
