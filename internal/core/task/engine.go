@@ -57,6 +57,15 @@ type Engine struct {
 	commitMu    sync.Mutex
 }
 
+// afterStoreCommitBeforePublish is a package-level test seam (same
+// pattern as statestore's fsyncDirFunc): a no-op in production, swapped
+// by a white-box test to deterministically pause one goroutine's commit
+// right in the gap Stanley named — after its store.Commit returned,
+// before its publish — while a second goroutine attempts a concurrent
+// commit, to prove commitMu actually blocks the second one rather than
+// relying on a race that might not happen to fire.
+var afterStoreCommitBeforePublish = func() {}
+
 // NewEngine does not itself seed the event buffer's replay floor: doing
 // that here would call store.Load before Open has otherwise touched the
 // store, and a workspace that is unreadable for any reason (corrupt
@@ -898,6 +907,14 @@ func (e *Engine) commit(ctx context.Context, caller CallerScope, requestID domai
 	if err != nil {
 		return receipt, err
 	}
+	// Test-only seam (H101-71 amendment: Kelly's criterion needs a
+	// deterministic proof, not a race that might not happen). No-op in
+	// production; commit_seam_test.go (package task, white-box) swaps
+	// it to prove commitMu actually blocks a second commit from
+	// reaching store.Commit at all while this goroutine is between its
+	// own store.Commit returning and its own publish — the exact gap
+	// Stanley named.
+	afterStoreCommitBeforePublish()
 	// A replay of an already-recorded request creates no new revision,
 	// mutation, or event identity — but StateStore.Commit still hands
 	// this call the ORIGINAL event records after confirming durability
