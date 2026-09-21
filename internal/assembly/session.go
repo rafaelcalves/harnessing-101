@@ -73,6 +73,13 @@ func WithSession(stderr io.Writer, root string, workspaceID domain.WorkspaceID, 
 // every CLI invocation is the only chance any of this has to run, so
 // each one pumps it once rather than leaving it for a process that
 // does not exist.
+//
+// An empty caller (H101-122) means this invocation is an observer, not
+// scoped to any one agent's identity — task, message, messages, and hold
+// all call WithSession this way. There is no such agent's acks directory
+// to ingest for "no one": skip IngestAcks rather than call it with an ID
+// the mailbox adapter will always reject as empty. This is not a
+// narrower error tolerance, it is recognizing the call has nothing to do.
 func driveMailbox(ctx context.Context, root string, caps host.Capabilities, caller domain.AgentID) error {
 	mail, err := mailbox.Open(filepath.Join(root, mailboxSubdir))
 	if err != nil {
@@ -84,6 +91,9 @@ func driveMailbox(ctx context.Context, root string, caps host.Capabilities, call
 	}
 	if err := deliverer.IngestPending(ctx); err != nil {
 		return err
+	}
+	if caller == "" {
+		return nil
 	}
 	return deliverer.IngestAcks(ctx, caller)
 }
