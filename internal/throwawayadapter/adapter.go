@@ -24,28 +24,53 @@ type Envelope struct {
 type Response struct {
 	OK     bool        `json:"ok"`
 	Result interface{} `json:"result,omitempty"`
-	Code   string      `json:"code,omitempty"`
-	Detail string      `json:"detail,omitempty"`
+	Error  *ErrorInfo  `json:"error,omitempty"`
+}
+
+type ErrorInfo struct {
+	Code             string  `json:"code"`
+	Detail           string  `json:"detail,omitempty"`
+	RequestID        string  `json:"requestID,omitempty"`
+	WorkspaceID      string  `json:"workspaceID,omitempty"`
+	Effect           string  `json:"effect,omitempty"`
+	Confirmation     string  `json:"confirmation,omitempty"`
+	ObservedRevision *uint64 `json:"observedRevision,omitempty"`
+	Uncertain        bool    `json:"uncertain,omitempty"`
 }
 
 func (a *Adapter) Handle(ctx context.Context, input []byte) ([]byte, error) {
 	var envelope Envelope
 	if err := json.Unmarshal(input, &envelope); err != nil {
-		return json.Marshal(Response{Code: string(domain.ErrInvalidArgument), Detail: "invalid operation envelope"})
+		return json.Marshal(Response{Error: &ErrorInfo{Code: string(domain.ErrInvalidArgument), Detail: "invalid operation envelope"}})
 	}
 	result, err := a.dispatch(ctx, envelope)
 	if err != nil {
-		return json.Marshal(errorResponse(err))
+		return json.Marshal(Response{Error: errorResponse(err, isMutation(envelope.Operation))})
 	}
 	return json.Marshal(Response{OK: true, Result: result})
 }
 
-func errorResponse(err error) Response {
+func errorResponse(err error, mutation bool) *ErrorInfo {
 	var derr *domain.Error
 	if !asDomainError(err, &derr) {
-		return Response{Code: string(domain.ErrIOFailure), Detail: err.Error()}
+		info := &ErrorInfo{Code: string(domain.ErrIOFailure), Detail: err.Error()}
+		if mutation {
+			info.Effect = string(domain.EffectUnknown)
+			info.Confirmation = string(domain.ConfirmationOutcome)
+			info.Uncertain = true
+		}
+		return info
 	}
-	return Response{Code: string(derr.Code), Detail: derr.Detail}
+	return &ErrorInfo{Code: string(derr.Code), Detail: derr.Detail, RequestID: string(derr.RequestID), WorkspaceID: string(derr.WorkspaceID), Effect: string(derr.Effect), Confirmation: string(derr.Confirmation), ObservedRevision: derr.ObservedRevision, Uncertain: derr.Code == domain.ErrOutcomeUncertain || (mutation && derr.Code == domain.ErrIOFailure)}
+}
+
+func isMutation(operation string) bool {
+	switch operation {
+	case "register", "update", "create", "transition", "report", "accept", "reject", "send", "ack", "start-run", "stop-run", "set-run-budget":
+		return true
+	default:
+		return false
+	}
 }
 
 // Kept local so the adapter's error path has no dependency on CLI rendering.

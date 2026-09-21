@@ -3,6 +3,7 @@ package throwawayadapter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/rafaelcalves/harnessing-101/internal/api"
@@ -68,6 +69,19 @@ func (fakeSession) Subscribe(context.Context, string) (<-chan domain.Event, erro
 
 func unsupported() error { return &domain.Error{Code: domain.ErrUnsupported, Detail: "test"} }
 
+type uncertaintySession struct{ fakeSession }
+
+func (uncertaintySession) RegisterAgent(context.Context, api.RegisterAgentRequest) (domain.Receipt, error) {
+	revision := uint64(42)
+	return domain.Receipt{}, &domain.Error{Code: domain.ErrOutcomeUncertain, Detail: "durability check failed", RequestID: "r-uncertain", WorkspaceID: "ws-1", Effect: domain.EffectApplied, Confirmation: domain.ConfirmationDurability, ObservedRevision: &revision}
+}
+
+type plainFailureSession struct{ fakeSession }
+
+func (plainFailureSession) RegisterAgent(context.Context, api.RegisterAgentRequest) (domain.Receipt, error) {
+	return domain.Receipt{}, errors.New("unexpected write response")
+}
+
 func TestHandleStructuredOperation(t *testing.T) {
 	adapter := New(fakeSession{})
 	response, err := adapter.Handle(context.Background(), []byte(`{"operation":"register","payload":{"requestID":"r1"}}`))
@@ -78,7 +92,7 @@ func TestHandleStructuredOperation(t *testing.T) {
 	if err := json.Unmarshal(response, &got); err != nil {
 		t.Fatal(err)
 	}
-	if !got.OK || got.Code != "" {
+	if !got.OK || got.Error != nil {
 		t.Fatalf("response = %+v", got)
 	}
 }
@@ -94,8 +108,42 @@ func TestHandleAdvertisesUnsupportedPhase3Operations(t *testing.T) {
 		if err := json.Unmarshal(response, &got); err != nil {
 			t.Fatal(err)
 		}
-		if got.Code != string(domain.ErrUnsupported) {
+		if got.Error == nil || got.Error.Code != string(domain.ErrUnsupported) {
 			t.Fatalf("%s response = %+v", operation, got)
 		}
+	}
+}
+
+func TestHandlePreservesStructuredUncertainty(t *testing.T) {
+	adapter := New(uncertaintySession{})
+	response, err := adapter.Handle(context.Background(), []byte(`{"operation":"register","payload":{}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got Response
+	if err := json.Unmarshal(response, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Error == nil {
+		t.Fatalf("response = %+v", got)
+	}
+	gotErr := got.Error
+	if gotErr.Code != string(domain.ErrOutcomeUncertain) || gotErr.RequestID != "r-uncertain" || gotErr.WorkspaceID != "ws-1" || gotErr.Effect != string(domain.EffectApplied) || gotErr.Confirmation != string(domain.ConfirmationDurability) || gotErr.ObservedRevision == nil || *gotErr.ObservedRevision != 42 || !gotErr.Uncertain {
+		t.Fatalf("structured uncertainty lost: %+v", gotErr)
+	}
+}
+
+func TestHandleMarksUnclassifiedMutationUncertain(t *testing.T) {
+	adapter := New(plainFailureSession{})
+	response, err := adapter.Handle(context.Background(), []byte(`{"operation":"register","payload":{}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got Response
+	if err := json.Unmarshal(response, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Error == nil || got.Error.Code != string(domain.ErrIOFailure) || !got.Error.Uncertain || got.Error.Effect != string(domain.EffectUnknown) || got.Error.Confirmation != string(domain.ConfirmationOutcome) {
+		t.Fatalf("unclassified mutation was not conservatively uncertain: %+v", got.Error)
 	}
 }

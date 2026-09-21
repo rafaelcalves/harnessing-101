@@ -45,8 +45,10 @@ func (d *throwawayDriver) Invoke(ctx context.Context, env WorkspaceEnv, call Cal
 			OK:       resp.OK,
 			Stdout:   string(respBytes),
 			Stderr:   stderr.String(),
-			Code:     resp.Code,
-			Detail:   resp.Detail,
+		}
+		if resp.Error != nil {
+			out.Code = resp.Error.Code
+			out.Detail = resp.Error.Detail
 		}
 		if resp.OK && resp.Result != nil {
 			resultBytes, err := json.Marshal(resp.Result)
