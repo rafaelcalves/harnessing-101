@@ -117,6 +117,8 @@ item 1) must:
 
 ### Item 2 — `StopRun` and owned process-tree termination
 
+**Amended H101-130 (2026-09-21)** — tree scope bounded; see [amendment](#h101-130--item-2-tree-scope-2026-09-21).
+
 `StopRun` through the shipped command surface must:
 
 - Transition run to `Stopping` then `Exited` only after **observed** child exit (boundaries:
@@ -139,6 +141,8 @@ item 1) must:
 ---
 
 ### Item 3 — Hard budget enforcement
+
+**Amended H101-130 (2026-09-21)** — elapsed deadline evidence model; see [amendment](#h101-130--item-3-elapsed-budget-evidence-2026-09-21).
 
 **One item, two stop paths.** The product must **actually stop** a run when a configured
 limit is exceeded — the first phase where "enforce" means termination, not disclosure.
@@ -286,6 +290,9 @@ not silently waived.
    claimed-engineer fixture as "sender identity handled safely" (Creed boundary review
    item 2 verdict). Impersonation-shaped input is accepted **by design** for routing; it
    is not an authentication control.
+4. **Item 2 tree limit (H101-130):** Supported profiles are supervised process groups,
+   not sandbox confinement. Escaping/daemonizing profiles are unsupported; deliberate
+   escape outside profile contract is outside product scope (CF2 family).
 
 **CI spot-checks (partial):**
 
@@ -336,6 +343,97 @@ the **exit gate** on that deliverable.
 | D2 | Cold-read required human on floor | **Docs** | Gap per H101-120 class |
 | D3 | Guide references uncommitted or internal-only paths | **Docs** | Not reproducible |
 | D4 | Phase 3 exit claimed without cold-read record | **Process** | Item 9 not discharged |
+
+---
+
+## H101-130 — Item 3 elapsed budget evidence (2026-09-21)
+
+**Ruling:** Stanley (`h101-128-phase3-supervision.md`) is correct — item 3's original
+elapsed wording ("terminates … before or at limit under test clock") demanded a
+**zero-latency operating-system exit guarantee** that a controlled clock cannot prove.
+That wording is **withdrawn**, not weakened in intent.
+
+**Intent preserved:** hard budget must **actually stop** a product-started run, with
+evidence the stop was **budget-caused** and **not** a natural exit. Warning-only or
+timer-without-termination remains item 3 D4 (blocker). The one-item budget decision
+(elapsed + token in a single item) **stands** — this amendment changes **how elapsed
+evidence is structured**, not whether both paths are required.
+
+**Replacement — elapsed path.** When monotonic elapsed time reaches the configured limit
+under an injectable/test clock, all four must hold:
+
+| # | Evidence piece | What it proves |
+| --- | --- | --- |
+| E1 | Durable `Stopping` (or equivalent) with **recorded budget cause** (trigger type, limit, budget revision) committed at or immediately after the limit crossing under controlled clock | Policy fired — distinguishable from natural exit |
+| E2 | Termination dispatch enqueued/attempted without waiting for natural child exit | Hard stop initiated, not passive observation |
+| E3 | Bounded escalation/observation timeout (Kelly-authored constant in Phase 3 fixture spec before first acceptance run; wall-clock cap ≤30s in CI) | Real-time latency is bounded, not infinite |
+| E4 | Native test on each ADR target: owned process group gone (PID/group probe) within E3 | Actual stop happened — not clock theatre |
+
+**Not acceptable:** freezing the test clock during an OS wait and calling that a deadline
+guarantee (new decision-table row D8). A naturally short-lived test child cannot
+discharge the elapsed path.
+
+**Token path unchanged** in structure: reported cumulative usage `>= limit` triggers the
+same termination path as `StopRun`. Overshoot from reporting/termination latency is a
+**documented limit** (item 8 disclosure), not a waiver of D2. Telemetry-loss stop is a
+separate honest outcome, not silent zero-counting.
+
+**Four-piece shape does not reopen stub risk:** elapsed and token remain coupled in item
+3; E1–E4 apply to elapsed only. Token path still requires a real reporting execution
+profile and independent native termination proof.
+
+#### Amendment to item 3 decision table (add rows)
+
+| # | Observation | Defect class | Fix |
+| --- | --- | --- | --- |
+| D8 | Test advances injectable clock but freezes it during OS wait, then claims deadline proof | **Test** | E1 proves ordering; E3+E4 prove latency — do not conflate |
+| D9 | `Exited` without budget-cause record while child was still running past limit+observation bound | **Product** | E1/E3 failure |
+| D10 | Budget trigger recorded but no termination dispatch before natural exit | **Product** | E2 failure — warning/timer only |
+
+---
+
+## H101-130 — Item 2 tree scope (2026-09-21)
+
+**Ruling:** **SATISFIED WITH LIMIT** when implemented per Stanley's bounded claim.
+"Owned process tree" means the **supervised process group** for **supported execution
+profiles** on each ADR target — not containment of an arbitrary deliberately escaping
+descendant.
+
+**What the product claims (in scope):**
+
+- Approved profiles used with `StartRun` keep descendants in the process group the
+  supervisor establishes; profiles that daemonize, double-fork, or detach into an
+  unowned session are **unsupported** and rejected **before spawn** (not after promising
+  tree termination).
+- `StopRun` and budget enforcement use graceful then forced **group** termination on
+  supported profiles.
+- Native tests include a **parent + worker** fixture, including **parent exits before
+  worker** — parent exit alone is insufficient for `Exited` (Stanley item 2 table).
+
+**What the product does not claim (limit, not gap):**
+
+- Confinement of a **deliberately escaping** program that breaks profile contract (same
+  family as Creed CF2 manual-start exposure: outside the product's start gate). This is
+  **not** a Phase 3 exit blocker; it is an **item 8 disclosure** obligation: supported
+  profiles are supervised groups, not a sandbox against hostile code with the user's
+  filesystem permissions.
+
+**Creed CF2 consistency:** CF2 says manual-start exposure does not close. An escaping
+descendant on an **unsupported or violated profile** is analogous — the product did not
+undertake to observe or stop it. An escaping descendant on a **supported profile that
+promised group membership** is a **product defect** (item 2 D2/D4), not a CF2 limit.
+
+**Verdict shape:** item 2 may exit **SATISFIED WITH LIMIT** naming this tree-scope
+boundary explicitly in item 8 disclosure and supported-profile documentation. It is not
+deferred to Phase 4.
+
+#### Amendment to item 2 decision table (add rows)
+
+| # | Observation | Defect class | Fix |
+| --- | --- | --- | --- |
+| D6 | Supported-profile parent+worker: worker survives after `StopRun` on either ADR target | **Product** | Group termination failure |
+| D7 | Profile allows daemonize/detach but `StartRun` promised tree kill | **Product** | Must reject at spawn (unsupported profile) |
+| D8 | Docs claim "all descendant processes" without supported-profile boundary | **Docs** | Item 8 / CF2-family overclaim |
 
 ---
 
