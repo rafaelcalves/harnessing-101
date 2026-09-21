@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
 )
 
 type spawnedCLIResult struct {
@@ -123,7 +125,7 @@ func TestCLI_Phase2ProductWalkthroughSubprocess(t *testing.T) {
 		t.Fatalf("message query failed: exit=%d stdout=%s stderr=%s", message.code, message.stdout, message.stderr)
 	}
 	for _, want := range []string{
-		"Sender:      claimed-engineer (claimed routing claim; identity unverified)",
+		"Sender:      claimed-engineer",
 		"Queued:", "Published:   (absent)", "Processed:   (absent)",
 		"Acknowledged:", "by analyst", "Task:        t1",
 	} {
@@ -131,4 +133,21 @@ func TestCLI_Phase2ProductWalkthroughSubprocess(t *testing.T) {
 			t.Fatalf("message output missing %q: %s", want, message.stdout)
 		}
 	}
+	recordedBy := outputField(message.stdout, "  Recorded by:")
+	if recordedBy == "" {
+		t.Fatalf("message output omitted Recorded by field: %s", message.stdout)
+	}
+	identityVerification := strings.TrimSuffix(recordedBy[strings.LastIndex(recordedBy, ", ")+2:], ")")
+	if identityVerification != string(domain.IdentityUnverified) {
+		t.Fatalf("Recorded by identity verification = %q, want %q", identityVerification, domain.IdentityUnverified)
+	}
+}
+
+func outputField(output, prefix string) string {
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		}
+	}
+	return ""
 }
