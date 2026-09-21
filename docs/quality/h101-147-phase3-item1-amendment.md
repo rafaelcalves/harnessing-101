@@ -38,7 +38,7 @@ Replaces bare "`Running` after approved profile" as the item 1 bar.
 | Layer | What | Where |
 | --- | --- | --- |
 | **A — CI** | Participation **fixture** (in-repo test tool); full shipped path; context injection; R3 negatives; dispatch-ordering barriers; approval/caller negatives | `go test` on both ADR targets every merge |
-| **B — manifest** | At least one owner-named agentic CLI per ADR target, managed through product, with auth/context proof — **or** owner deferral for that tool/target | Native manifest; not automated in network-blocked CI |
+| **B — runner + manifest** | Committed runner script produces manifest in provider-reachable env; one compatibility descriptor per named tool (or deferral). See H101-153 amendment | Not CI in network-blocked env; script re-runnable by owner |
 
 Claudio H101-141: real Claude Code blocked at provider network in hive CI
 environment. Layer B cannot be CI-mandatory where provider reachability is absent;
