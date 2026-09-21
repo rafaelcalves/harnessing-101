@@ -42,6 +42,13 @@ func receiptFromResult(t *testing.T, r Result) *domain.Receipt {
 	if rec := parseCLIReceipt(r.Stdout); rec != nil {
 		return rec
 	}
+	var resp struct {
+		OK     bool            `json:"ok"`
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(r.Stdout), &resp); err == nil && resp.OK && len(resp.Result) > 0 {
+		return parseThrowawayReceipt(t, resp.Result)
+	}
 	return nil
 }
 
@@ -133,6 +140,38 @@ func assertUI04EndState(t *testing.T, snap domain.Snapshot) {
 	}
 	if task.CurrentResultID == nil || *task.CurrentResultID != want.CurrentResultID {
 		t.Fatalf("task result = %v, want %q", task.CurrentResultID, want.CurrentResultID)
+	}
+}
+
+func assertDisclosure(t *testing.T, stderr string) {
+	t.Helper()
+	if !stderrHasDisclosure(stderr) {
+		t.Fatalf("stderr missing ADR 0002 disclosure: %q", stderr)
+	}
+}
+
+func assertMessageDeliveryFacts(t *testing.T, output string, wantAck bool) {
+	t.Helper()
+	for _, field := range []string{"Queued:", "Published:", "Processed:"} {
+		if !strings.Contains(output, field) {
+			t.Fatalf("message output missing delivery fact %q: %s", field, output)
+		}
+	}
+	if wantAck {
+		if strings.Contains(output, "Acknowledged: (absent)") {
+			t.Fatalf("expected acknowledged message, got absent: %s", output)
+		}
+		if !strings.Contains(output, "Acknowledged:") {
+			t.Fatalf("message output missing acknowledgement: %s", output)
+		}
+	} else if !strings.Contains(output, "Acknowledged: (absent)") {
+		t.Fatalf("pending message must show absent acknowledgement: %s", output)
+	}
+	if !strings.Contains(output, "Recorded by:") {
+		t.Fatalf("message output missing provenance Recorded by: %s", output)
+	}
+	if !strings.Contains(output, "unverified") {
+		t.Fatalf("message output must mark identity unverified: %s", output)
 	}
 }
 

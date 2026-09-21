@@ -1944,9 +1944,19 @@ Full writeups live in the repo for Stanley H101-91. Summary:
 
 **None.** Both adapters pass the same independently specified domain assertions. Rendering differs (CLI stderr receipt line vs throwaway JSON `Response`); semantic checks use harness snapshot and stable error codes.
 
-### Stage 2 scope (not started — stage 1 committed `9d2cce5`)
+### Stage 2 scope — COMPLETE (2026-09-21)
 
-UI-05..08 including Phase 3 `Unsupported` on `StartRun`/`StopRun`/`SetRunBudget`, snapshot enumeration, observer/restart scenarios per H101-53/H101-70, detachment probe, crossover and concurrent-observer cases.
+UI-05..08 on **both** adapters; crossover continuation; multi-session observation via `assembly.OpenContractHarness` (flock-safe; adaptercontract still does not import `host`).
+
+| Scenario | Tests | Notes |
+| --- | --- | --- |
+| **UI-05** | `TestUI05_ProvenanceDeliveryFactsAndDisclosure` | CLI `messages`/`message`; throwaway snapshot/message; disclosure + delivery facts + unverified provenance |
+| **UI-06** | `TestUI06_*` (5 tests) | Discovery without injected IDs; cursor observe; restart `CursorExpired`; concurrent commit ordering; detachment probe |
+| **UI-07** | `TestUI07_*` (3 tests) | Graceful reopen; request-id replay; detach does not cancel other session work |
+| **UI-08** | `TestUI08_*` (2 tests) | Detachment probe; throwaway `start-run`/`stop-run`/`set-run-budget` → `Unsupported` |
+| **Cross-cutting** | `TestCrossAdapter_Continuation` | CLI writes, throwaway continues to UI-04 end state |
+
+Verify: `go test ./internal/adaptercontract/` — all green. Lint: `golangci-lint run ./internal/adaptercontract/...` — 0 issues.
 
 ---
 
@@ -2016,5 +2026,17 @@ Full ruling: [`h101-105-macos-runner-ruling.md`](h101-105-macos-runner-ruling.md
 
 | Question | Verdict |
 | --- | --- |
-| Runner discharges darwin re-proof on every change? | **Satisfied with limit** — first green `darwin-arm64` GHA run still open (credentials) |
-| Runner vs manual manifest? | **Both stand** — manifest historical; runner supersedes as live evidence after first green run |
+| Runner discharges darwin re-proof on every change? | **Satisfied** — GHA run `35598625946` green on `2534afb` |
+| Runner vs manual manifest? | **Both stand** — manifest historical; runner is live standing evidence |
+
+---
+
+## H101-90 stage 2 + H101-105 upgrade — standing (2026-09-21)
+
+| # | Standing |
+| --- | --- |
+| 1 | **Partially satisfied** — linux + darwin CI runner green (`35598625946`); manifest retained as historical |
+| 2 | **Partially satisfied** — darwin native crash+lock in CI; cross-target ack gap (H101-104) open |
+| 3 | **Satisfied** — UI-01..08 on both adapters; crossover; `go test ./internal/adaptercontract/` green |
+| 4–8 | Unchanged |
+| 9 | **N/A** |

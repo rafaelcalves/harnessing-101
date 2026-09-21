@@ -12,8 +12,8 @@ Contract: [H101-55](definition-of-done.md#h101-55--platform-ruling-vs-item-2-202
 
 ## Question 1 — Does the runner discharge darwin/arm64 re-proof on every change?
 
-**Verdict: SATISFIED WITH LIMIT** — conditional on one observed green
-`darwin-arm64` job inside GitHub Actions.
+**Verdict: SATISFIED** — upgraded 2026-09-21 after observed green
+`darwin-arm64` job (GHA run `35598625946`, commit `2534afb`, `macos-14`).
 
 ### What H101-55 asked for
 
@@ -36,20 +36,15 @@ path; the runner is the ongoing path.
 | --- | --- |
 | Workflow shape and commands | **Present** in repo (`f6075fa`, local) |
 | Commands pass on native darwin/arm64 | **Yes** — Kevin reproduced every job step locally and watched each pass; god did **not** re-run them, so this rests on Kevin's single disclosed report |
-| First green run inside GitHub Actions | **Not observed** — invalid `gh` credential blocked push/PR |
+| First green run inside GitHub Actions | **Observed** — run `35598625946` on `2534afb` (`macos-14`); `darwin-arm64` job green (god session) |
 
 ### Reasoning
 
 - **Structural delivery:** satisfied. The job matches H101-55's runner
   requirement: same contract as the manifest, automated on every change,
   correct architecture label.
-- **"On every change" discharge:** **not yet.** Until a push triggers a
-  green `darwin-arm64` job in Actions, evidence is still one-machine local
-  reproduction — stronger than the original manifest only because the
-  workflow exists, but not yet **CI-attested**.
-- **Open condition:** one watched green `darwin-arm64` run after the human
-  fixes push credentials. After that, this question upgrades to **satisfied**
-  without limit for items 1–2 darwin native evidence.
+- **"On every change" discharge:** **satisfied** as of run `35598625946`.
+  The open condition from the initial ruling is closed.
 
 ### Out of scope (not a defect)
 
@@ -67,8 +62,7 @@ standing evidence** once Question 1's open condition closes. Manifest is
 | Role | Manifest | Runner |
 | --- | --- | --- |
 | **Historical** | Permanent: first disclosed native run that satisfied H101-55 before a runner existed (`02b1407`, redacted H101-100) | N/A |
-| **Standing evidence (now)** | Still carries darwin discharge for items 1–2 until first green GHA run | Prospective — workflow landed, not yet CI-proven |
-| **Standing evidence (after first green GHA run)** | Archive / baseline only | **Authoritative** for darwin items 1–2 on every change |
+| **Standing evidence (now)** | Archive / baseline only | **Authoritative** for darwin items 1–2 on every change |
 
 ### Reasoning
 
@@ -85,5 +79,5 @@ standing evidence** once Question 1's open condition closes. Manifest is
 
 | Question | Verdict |
 | --- | --- |
-| 1. Runner discharges darwin re-proof on every change? | **Satisfied with limit** — open condition: one observed green `darwin-arm64` Actions run |
-| 2. Runner vs manifest? | **Both stand** — manifest historical; runner becomes live standing evidence after condition closes |
+| 1. Runner discharges darwin re-proof on every change? | **Satisfied** — run `35598625946` green on `2534afb` |
+| 2. Runner vs manifest? | **Both stand** — manifest historical; runner is live standing evidence |

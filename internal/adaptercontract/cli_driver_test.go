@@ -45,14 +45,7 @@ func (d *cliDriver) Invoke(ctx context.Context, env WorkspaceEnv, call Call) Res
 	if len(call.CLIArgs) == 0 {
 		return Result{ExitCode: 1, Stderr: "missing CLI command"}
 	}
-	args := []string{call.CLIArgs[0],
-		"-workspace", env.Root,
-		"-workspace-id", string(env.WorkspaceID),
-	}
-	for _, r := range env.Reviewers {
-		args = append(args, "-reviewer", string(r))
-	}
-	args = append(args, call.CLIArgs[1:]...)
+	args := joinCLI(cliWorkspaceArgs(env), call.CLIArgs...)
 	return d.run(ctx, args)
 }
 
