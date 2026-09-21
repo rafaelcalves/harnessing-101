@@ -76,9 +76,9 @@ func harnessConcurrentCommitsInOrder(t *testing.T, h *assembly.ContractHarness, 
 			defer wg.Done()
 			id := domain.TaskID("ui06-t" + strconv.Itoa(i))
 			_, err := session.CreateTask(ctx, api.CreateTaskRequest{
-				RequestID: domain.RequestID("ui06-r" + strconv.Itoa(i)),
-				TaskID:    id,
-				Title:     "concurrent",
+				RequestID:  domain.RequestID("ui06-r" + strconv.Itoa(i)),
+				TaskID:     id,
+				Title:      "concurrent",
 				AssigneeID: domain.AgentID(expected.EngineerID),
 			})
 			if err != nil {

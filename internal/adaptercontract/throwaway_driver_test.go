@@ -87,4 +87,3 @@ func parseThrowawayReceiptSilent(raw []byte) *domain.Receipt {
 	}
 	return &rec
 }
-
