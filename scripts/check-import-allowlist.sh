@@ -31,6 +31,14 @@ allowed_ports() {
 	' "$CONFIG"
 }
 
+allowed_presentation() {
+	awk -v wanted="$1" '
+		/^# H101-43 presentation role rule:/ { section=1; next }
+		section && $1 == wanted { found=1 }
+		END { exit(found ? 0 : 1) }
+	' "$CONFIG"
+}
+
 check_allowlist_paths() {
 	bad=0
 	while IFS= read -r package_path; do
@@ -53,6 +61,8 @@ check_allowlist_paths() {
 
 state_store="$MODULE/internal/adapters/statestore"
 ports="$MODULE/internal/core/ports"
+core_task="$MODULE/internal/core/task"
+host="$MODULE/internal/host"
 if ! check_allowlist_paths; then
 	exit 2
 fi
@@ -76,6 +86,14 @@ while IFS= read -r row; do
 		fi
 		if [[ "$imported" == "$ports" ]] && ! allowed_ports "$pkg"; then
 			echo "forbidden outbound-ports import: $pkg -> $imported" >&2
+			violations=1
+		fi
+		if [[ "$imported" == "$core_task" && "$pkg" != "$host" ]] && ! allowed_presentation "$pkg"; then
+			echo "forbidden direct core-task import from presentation/package: $pkg -> $imported" >&2
+			violations=1
+		fi
+		if [[ "$imported" == "$host" ]] && ! allowed_presentation "$pkg"; then
+			echo "forbidden direct host import from presentation/package: $pkg -> $imported" >&2
 			violations=1
 		fi
 	done

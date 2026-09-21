@@ -7,8 +7,11 @@ import (
 
 	"github.com/rafaelcalves/harnessing-101/internal/adapters/statestore"
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
+	"github.com/rafaelcalves/harnessing-101/internal/core/task"
 	"github.com/rafaelcalves/harnessing-101/internal/core/ports"
 )
+
+var _ = task.CallerScope{}
 
 func reachPersistence(root string) error {
 	store, err := statestore.Open(root)
