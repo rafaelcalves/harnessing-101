@@ -68,9 +68,9 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 | --- | --- | --- |
 | 1 | CLI product cycle (§2 walkthrough) | **Partially** — linux/amd64 subprocess §2 walkthrough passes (`9a6b464`); darwin manifest pending (H101-55) |
 | 2 | Restart after crash | **Partially** — linux crash-reopen with state (`f242b2b`); handoff visibility now CLI-provable (`message`); crash test still uses host for ack survival; darwin manifest still needed |
-| 3 | Swappability (ADR 0003 UI-01–08) | **No** — UI-06 engine scenarios met (`8ba1112`/`3a4d320`); no `adaptercontract` suite or second adapter |
+| 3 | Swappability (ADR 0003 UI-01–08) | **No** — `throwawayadapter` exists (`7dc7809`); no `adaptercontract` suite; UI-01–08 not run on both adapters |
 | 4 | Containment preserved | **Satisfied** — store half (`24a2022`); presentation imports `api` only; `internal/assembly` sole `host` importer (`9a6b464`) |
-| 5 | Mailbox adapter (H101-22) | **No** — needs file mailbox wired to delivery-fact recorders |
+| 5 | Mailbox adapter (H101-22) | **No** — `FileMailbox` + `Deliverer` (`7247dc3`); not wired in assembly; no full send→publish→process→ack integration test |
 | 6 | First-run disclosure (H101-16) | **Satisfied** — every invocation, stderr, ADR 0002 sentence, CI tests (`1eda92b`) |
 | 7 | Phase 3 ops `Unsupported` | **Satisfied** — `StartRun`/`StopRun`/`SetRunBudget` on `api.FrontendSession` return `Unsupported`; named test per op (`20e0caa`); no CLI subcommands (allowed) |
 | 8 | Zero network (CLI tree) | **Satisfied** — `go list -deps ./cmd/harnessing` finds no `net`/`net/http` (`24a2022`) |
@@ -1758,6 +1758,83 @@ Not a stealth architecture change — implementation of an existing boundary. **
 | 3 | **Not satisfied** — suite must add UI-08 Phase 3 named assertions; second adapter needed |
 | 4 | **Satisfied** |
 | 5 | **Not satisfied** |
+| 6 | **Satisfied** |
+| 7 | **Satisfied** |
+| 8 | **Satisfied** |
+| 9 | **N/A** |
+
+---
+
+## H101-83 acceptance review (2026-09-21)
+
+Reviewed `7247dc3` (Kevin: `internal/adapters/mailbox`) and `7dc7809` (Claudio: `internal/throwawayadapter`). Re-ran mailbox tests (15) and throwawayadapter tests — pass. Did not re-run full `go test ./...` (god verified).
+
+**Verdict: ACCEPTED WITH FOLLOW-UP** (both commits)
+
+### 1. Item 5 — SATISFIED or not?
+
+**NOT SATISFIED.**
+
+| Item 5 requirement | Status |
+| --- | --- |
+| File mailbox adapter | **Yes** — `FileMailbox` implements `ports.Mailbox` (`ScanInbox`, `Publish`, `Archive`) |
+| Sole writer of `RecordMessagePublished` / `RecordMessageProcessed` | **Partial** — `Deliverer` is the designed sole driver; **host still exposes both methods on `Capabilities`**; **not wired in `assembly`** — product path does not invoke `Deliverer` yet |
+| Publish precedes process; reverse order rejected | **Yes** — `Deliverer` enforces from snapshot facts; `TestDeliverer_IngestPending_RefusesProcessedBeforePublished` |
+| `MessageAcknowledgement` + `AcknowledgeMessage` same rules | **Yes** — `IngestAcks` calls `AcknowledgeMessage`; file ack round-trip tested |
+| **Full send → publish → process → ack through adapter** | **No** — deliverer tests use `fakeRecorder` with pre-seeded messages; **no test chains `SendMessage` (engine) → `DeliverPending` → `IngestPending` → ack through real engine + mailbox** |
+
+Follow-up before discharge: wire `Deliverer` in assembly/host; one integration test through real engine covering the full path.
+
+### 2. Item 3 — how much discharged, what remains?
+
+**Moved materially; still NOT SATISFIED.**
+
+| Piece | Before | After `7dc7809` |
+| --- | --- | --- |
+| Second adapter package | **Missing** | **`internal/throwawayadapter`** — JSON driver over `api.FrontendSession` only; import gate clean |
+| `adaptercontract` suite | Missing | **Still missing** — no `internal/adaptercontract/` |
+| UI-01–08 on both adapters | No | **No** — throwawayadapter has fake-session unit tests only (expected gap until suite) |
+| Cross-adapter continuation | No | No |
+| Concurrent observer | No | No |
+
+**Rough standing:** prerequisite **second adapter exists** (~one third of item 3's structural work). **~0% of the contract suite discharged.** Dispatch the suite card with both adapters named: CLI (`cmd/harnessing` via `assembly`) and `throwawayadapter`.
+
+### 3. Divergence A — `domain.Envelope.TaskID` vs boundaries.md
+
+**Match.** `boundaries.md` line 34: envelope carries "optional task ID" among version, workspace ID, message ID, sender/recipient IDs, kind, body, creation time, optional reply-to ID. `domain.Envelope` has all nine fields with `TaskID *TaskID` and `ReplyToMessageID *MessageID`. **Spec gap closed.**
+
+### 4. Divergence B — `MessageAcknowledgement` field list
+
+**Exact match.** `boundaries.md` line 59: schema version, workspace ID, unique control-record ID, original message ID, recipient agent ID. `domain.MessageAcknowledgement`: `SchemaVersion`, `WorkspaceID`, `ControlRecordID`, `OriginalMessageID`, `RecipientAgentID`. **No extra or missing fields.**
+
+### 5. Divergence D — `ScanInbox` cursor ignored; port doc tolerance?
+
+**Not a defect.** Read `internal/core/ports/outbound.go` `Mailbox` interface — **no doc comment** on cursor or duplicate-scan tolerance. **`boundaries.md` port 6 (line 49)** says: *"Scan can repeat entries"*; line 57: *"Duplicate scans are harmless through persisted deduplication."* Kevin's `FileMailbox` comment cites boundaries correctly. Port doc is thin; **boundaries is authoritative**. Ignoring cursor while returning full inbox is **consistent with spec**; optimization deferred is acceptable.
+
+### 6. Divergence F — named test per Denied and NotFound?
+
+**Partial — Denied yes, NotFound no.**
+
+| Disposition | Named test? |
+| --- | --- |
+| `Denied` on ack ingest | **Yes** — `TestDeliverer_IngestAcks_GoesThroughAcknowledgeMessageAndQuarantinesDenied` |
+| `NotFound` on ack ingest | **No** — `IngestAcks` handles `ErrNotFound` in code (line 161) but **no named subtest** |
+
+Same class as item 7 naming rule. **Follow-up:** add `TestDeliverer_IngestAcks_QuarantinesNotFound` (or subtest) before treating ack quarantine coverage complete.
+
+### Divergence C (Stanley's) — blocks item 5?
+
+**Does not block this verdict.** `WriteAck`/`ScanAcks` on concrete `FileMailbox` vs `ports.Mailbox` is an architecture/port-shape question for Stanley. Behaviour is tested (`TestAck_WriteScanArchiveRoundTripAndScopeMismatch`, scope-mismatch skip). Item 5 can be ruled on adapter behaviour; port placement is separate.
+
+### Nine exit items — owner-ready standing (2026-09-21)
+
+| # | Standing |
+| --- | --- |
+| 1 | **Partially satisfied** — linux/amd64 yes; darwin pending |
+| 2 | **Partially satisfied** |
+| 3 | **Not satisfied** — second adapter exists; contract suite + UI-01–08 on both outstanding |
+| 4 | **Satisfied** |
+| 5 | **Not satisfied** — mailbox adapter built; assembly wiring + full-path integration test outstanding |
 | 6 | **Satisfied** |
 | 7 | **Satisfied** |
 | 8 | **Satisfied** |
