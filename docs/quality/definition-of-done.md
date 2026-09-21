@@ -69,7 +69,7 @@ Phase 2 is **not accepted** until all of the following pass in CI on `main`. Ite
 | 1 | CLI product cycle (§2 walkthrough) | **No** — subprocess walkthrough passes (`3d118cc`); surface gaps closed (H101-68); **domain gap**: transition actor/timestamp not persisted for Doing/Blocked; darwin manifest pending (H101-55) |
 | 2 | Restart after crash | **Partially** — linux crash-reopen with state (`f242b2b`); handoff visibility now CLI-provable (`message`); crash test still uses host for ack survival; darwin manifest still needed |
 | 3 | Swappability (ADR 0003 UI-01–08) | **No** — subscription/replay landed (`49d9d84`) but UI-06 not proven (restart cursor + publish-order gaps, H101-70); no `adaptercontract` suite or second adapter |
-| 4 | Containment preserved | **Partially** — store half satisfied (`24a2022`); UI import allowlist (no host from presentation) not yet enforced |
+| 4 | Containment preserved | **Partially** — store half satisfied (`24a2022`); UI gate enforced (`306c6fa`) except documented `cmd/harnessing` interim exception until `FrontendSession` migration |
 | 5 | Mailbox adapter (H101-22) | **No** — needs file mailbox wired to delivery-fact recorders |
 | 6 | First-run disclosure (H101-16) | **Satisfied** — every invocation, stderr, ADR 0002 sentence, CI tests (`1eda92b`) |
 | 7 | Phase 3 ops `Unsupported` | **No** — needs Capabilities/CLI surface and explicit `Unsupported` assertions |
@@ -954,7 +954,7 @@ Re-checked against `9055124`, not the earlier draft from memory. **The split sur
 | Half | Committed ADR says | Status |
 | --- | --- | --- |
 | **Store-import** | Only reviewed assembly (`host`) constructs persistence; no storage allowlist exception for UI (ADR §Prohibitions) | **Satisfied** on current tree (`24a2022` — `cmd/harnessing` imports `host` only, not `statestore`/`ports`) |
-| **UI import allowlist** | Presentation packages must not import `host`, `core/task`, storage, or outbound ports; only assembly imports `host` (ADR §Prohibitions) | **Not satisfied** — gate not built; `cmd/harnessing` still imports `host` directly until `FrontendSession` / `internal/api` lands (H101-52) |
+| **UI import allowlist** | Presentation packages must not import `host`, `core/task`, storage, or outbound ports; only assembly imports `host` (ADR §Prohibitions). CI gate via `check-import-allowlist.sh` H101-43 rule; forbidden fixture exit **1**. | **Partially** — gate enforced (`306c6fa`); `cmd/harnessing` interim exception remains until `FrontendSession` migration removes direct `host`/`Capabilities` use |
 
 `FrontendSession`, `GetSnapshot` enumeration (UI-06), and the adaptercontract suite location are all **present in the committed ADR** — Stanley did not drop the design H101-42 referenced. (ADR header still says "Proposed for review"; technical content is what item 3/4 reference.)
 
@@ -1492,3 +1492,54 @@ H101-69 said enumeration-via-snapshot satisfies UI-06 discovery half and subscri
 | Same-host multi-session observation sufficient | Closes architecture ceiling Kevin flagged; does not prove current implementation |
 
 H101-55 darwin manifest: still open, unchanged.
+
+---
+
+## H101-73 / H101-43 acceptance review (2026-09-21)
+
+Reviewed commit `306c6fa` (presentation import gate). Re-ran `./scripts/check-import-allowlist.sh` — tree exit 0; `./testdata/forbidden` exit 1 naming statestore, ports, and core/task violations.
+
+**Verdict: ACCEPTED WITH FOLLOW-UP**
+
+### Item 4 UI half — does it discharge?
+
+**No. UI half stays open.** Pick **reading 2** (the exception is the hole item 4 names), with the qualification structure from reading 3.
+
+| Layer | Status |
+| --- | --- |
+| **Checker mechanism** | **Satisfied** — production packages importing `host` or `core/task` are rejected unless allowlisted; forbidden fixture fails with exit **1**; gate is CI-enforced |
+| **Containment at the production CLI** | **Not satisfied** — `cmd/harnessing` is the interim presentation adapter and remains allowlisted; package-level check cannot distinguish `Capabilities` from `FrontendSession` inside that package |
+
+Item 4 asks presentation packages not reach the core around the session boundary. **The one package where that violation would occur today is exactly the exception.** Enforcing everywhere else is necessary and real progress; it does not discharge the half.
+
+**Item 4 overall: PARTIALLY SATISFIED** (unchanged label, updated substance — store half yes; UI gate yes; CLI exception no).
+
+### God Q1 — is a declared-and-documented limit enough for containment?
+
+**Necessary, not sufficient for discharge.**
+
+Inline reason in `import-allowlist.txt` (H101-33 lesson applied) makes the exception **auditable** — good, required. For **containment discharge**, documentation does not substitute for the boundary holding where presentation meets host. A documented hole is a tracked migration debt, not a satisfied criterion.
+
+### God Q2 — auditable exception
+
+**Confirmed.** Reason inline where the allowlist reader already looks — H101-33 correction applied without being asked.
+
+### Follow-up — card CLI `FrontendSession` migration
+
+**Yes. Card it.** `cmd/harnessing` must migrate from direct `host`/`Capabilities` to `FrontendSession`, then remove the allowlist exception.
+
+**Not a rename.** `FrontendSession` deliberately exposes no `Close` and no mailbox delivery facts — composition/assembly must own workspace lifecycle and any paths the session surface omits. Whoever migrates must decide where lifecycle lives before promising the card.
+
+### H101-55 (prerequisite noted)
+
+Darwin/arm64 native manifest still open. No impact on item 4 ruling.
+
+### H101-72 (prerequisite noted)
+
+Already answered (`503fb21` / H101-70 inform). UI-06 assertions now name restart and interleaving cases.
+
+### Nine exit items — item 4 line for owner
+
+| # | Standing |
+| --- | --- |
+| 4 | **Partially satisfied** — store-import yes; UI import gate enforced except interim `cmd/harnessing` exception pending `FrontendSession` migration |
