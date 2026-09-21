@@ -88,6 +88,9 @@ table keeps them coupled.
 
 ### Item 1 — Approved-profile `StartRun`
 
+**Amended H101-147 (2026-09-21)** — managed start must launch a participating agent
+tool, not a generic process. See [amendment](#h101-147--item-1-managed-agent-tool-evidence-2026-09-21).
+
 `StartRun` through the shipped `harnessing` command (subprocess, same surface as Phase 2
 item 1) must:
 
@@ -112,6 +115,86 @@ item 1) must:
 | D5 | `StartRun` receipt missing `operationID` when async work continues | **Product** | boundaries command-completion rule |
 | D6 | Test calls `host`/`Capabilities` directly instead of `harnessing start-run` (or CLI equivalent) | **Test** | Not product-surface proof |
 | D7 | Pass on one CI target only via `t.Skip` | **Test** | Both ADR targets must run natively |
+
+---
+
+## H101-147 — Item 1 managed agent-tool evidence (2026-09-21)
+
+**Product ruling (Angela, owner H101-142):** profiles invoke the user's
+**already-installed agentic command-line interface (CLI)** — e.g. Claude Code, Codex,
+Cursor Agent. The user installs and authenticates; the product uses them. Generic
+approved-process→`Running` proof is **withdrawn** — it could pass while starting
+nothing a user could coordinate with.
+
+**Dispatch-ordering invariant:** unchanged. Stanley H101-135 numbered sequence
+(commit intent → dispatch-attempted marker → `StartRun` once → separate outcome
+commit; crash between marker and Start stays ambiguous/`RecoveryRequired`). This
+amendment does not relax it.
+
+### Required evidence (replaces bare `Running` proof)
+
+| # | Requirement | Checkable? |
+| --- | --- | --- |
+| R1 | **Selected tool** — `StartRun` launches the executable named by an **approved profile revision** for the bound agent, not an ad hoc argv | **CI** |
+| R2 | **Participation context** — the start path supplies task and workspace context the tool needs to **participate** (paths, identifiers, or documented protocol handoff), not merely spawn a process | **CI** (fixture) + **manifest** (real tool) |
+| R3 | **Honest failure modes** — missing binary, authentication-required, unsupported invocation mode, and spawn failure each return stable, actionable errors — not `Running`, not silent success | **CI** (fixture negatives) + **manifest** (real-tool auth/network) |
+| R4 | **Approval / caller scope** — all pre-H101-147 gates preserved: profile approval event, host caller scope, no message-`SenderAgentID` authorization (CF1), no retroactive provenance upgrade (CF3) | **CI** |
+| R5 | **Installed ≠ approved** — detecting an installed tool on `PATH` does **not** imply workspace approval; unapproved profile still `Denied` | **CI** negative |
+
+### Two-layer proof model
+
+**Layer A — CI (both ADR targets, every merge):** Use a **participation fixture**
+shipped in-repo: a minimal approved profile pointing at a test binary/script that
+(1) is launched through the full shipped `harnessing start-run` path under
+continuing-host mode, (2) receives injected task/workspace context via the
+profile's documented mechanism, (3) emits an observable participation signal
+(reads context, writes a protocol-compliant file or exit marker). Prove
+`Starting`→`Running`, context present, and R3 negative cases with the fixture.
+**A `sleep`/`cat` profile cannot discharge Layer A.**
+
+**Layer B — real agentic CLI (per target, before Phase 3 exit):** Record a
+**native manifest** (same class as darwin-arm64 milestone) for at least **one**
+owner-named agentic CLI per ADR target (`linux/amd64`, `darwin/arm64`), **or**
+an **owner-documented deferral** for that target/tool pair. Manifest must show:
+managed start through the product (not manual shell), authenticated tool state,
+context supplied, and honest handling when auth or launch fails.
+
+**CI cannot require live provider network.** Claudio H101-141: installed Claude
+Code blocked at `api.anthropic.com:443` in the hive environment — a clean
+reachability failure, not a product defect. Layer B is **manifest/disclosure** on
+CI; Layer A is **automated CI**. Do not fake Layer B in CI with network calls.
+
+**Three named tools** (Claude Code, Codex, Cursor Agent) are **compatibility
+targets**, not one proof for all. Each needs Layer B evidence or explicit owner
+deferral before release claims that tool.
+
+### Amendment to item 1 decision table (add rows)
+
+| # | Observation | Defect class | Fix |
+| --- | --- | --- | --- |
+| D8 | `Running` but launched process received no task/workspace context | **Product** | R2 — launch ≠ participate |
+| D9 | Layer A uses non-participating fixture (`sleep`, echo-only) | **Test** | Participation fixture required |
+| D10 | Missing binary / auth-required / unsupported mode → `Running` or silent success | **Product** | R3 |
+| D11 | Installed tool on `PATH` starts without profile approval | **Product** | R5 — installed ≠ approved |
+| D12 | Spawn before dispatch-attempted marker durable, or duplicate Start on replay | **Product** | H101-135 violation |
+| D13 | Layer B claimed from manual shell start or spike without managed `StartRun` | **Evidence** | Manifest must use product path |
+
+### Estimate implication
+
+**Material.** Kevin's 3–5 agent-day estimate assumed dispatch-ordering as the hard
+part against the **old** generic-process criterion. H101-147 adds: participation
+fixture + profile context wiring + failure taxonomy + Layer B manifest procedure.
+**Owner should not hold the stale 3–5 figure** — plan **~5–8 agent-days** for item
+1 alone, with dispatch-ordering still the deepest invariant work.
+
+### Item 9 coupling
+
+When the Phase 3 guide supplement lands (H101-138 limit), it must document managed
+`StartRun` with a **named participation fixture** walkthrough and state which
+agentic CLIs have Layer B manifests vs owner deferral.
+
+Full amendment authority: Angela H101-146 / owner H101-142. Ruling:
+[`h101-147-phase3-item1-amendment.md`](h101-147-phase3-item1-amendment.md).
 
 ---
 
