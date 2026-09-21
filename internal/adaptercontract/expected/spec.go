@@ -52,8 +52,13 @@ var UI01ValidRegister = struct {
 var UI03IdempotentRegister = Receipt{RequestID: "ui03-r1", Revision: 1}
 
 // UI04CycleEnd is the expected domain state at the equivalent committed cut
-// after the full UI-04 cycle (boundaries.md H101-94 "UI-04 final cut"):
-// 12 user-request groups + 2 delivery-record groups = revision 14.
+// after the full UI-04 cycle (boundaries.md H101-94 "UI-04 final cut",
+// amended per H101-109/H101-23): 13 user-request groups + 2 delivery-record
+// groups = revision 15. H101-109 requires SendMessage's SenderAgentID to be
+// a registered agent, so the cycle's claimed sender ("claimed-engineer",
+// deliberately distinct from -caller to prove the claim is independent of
+// authorship) is now a third registered agent, one more commit than the
+// original H101-94 cut counted.
 var UI04CycleEnd = struct {
 	WorkspaceRevision uint64
 	TaskStatus        domain.TaskStatus
@@ -62,12 +67,12 @@ var UI04CycleEnd = struct {
 	CurrentResultID   domain.ResultID
 	AgentCount        int
 }{
-	WorkspaceRevision: 14,
+	WorkspaceRevision: 15,
 	TaskStatus:        domain.TaskDone,
 	TaskTitle:         "Investigate",
 	TaskAssignee:      domain.AgentID(EngineerID),
 	CurrentResultID:   domain.ResultID(ResultID2),
-	AgentCount:        2, // engineer and analyst; reviewer is authority not an agent record
+	AgentCount:        3, // engineer, analyst, and claimed-engineer; reviewer is authority not an agent record
 }
 
 // Stable domain error codes adapters must surface (ADR UI-02).

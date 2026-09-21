@@ -96,6 +96,18 @@ func TestRun_SendAndAckCycle(t *testing.T) {
 	dir := t.TempDir()
 	const wsID = "ws-msg"
 
+	// H101-23's ripple: SendMessage now checks both SenderAgentID and
+	// RecipientAgentID against the registry, so both must be registered
+	// before the send below.
+	if code := run([]string{"register", "-workspace", dir, "-workspace-id", wsID,
+		"-caller", "engineer", "-request-id", "reg-engineer", "-agent", "engineer", "-display-name", "Engineer"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
+		t.Fatal("register engineer failed")
+	}
+	if code := run([]string{"register", "-workspace", dir, "-workspace-id", wsID,
+		"-caller", "reviewer1", "-request-id", "reg-reviewer1", "-agent", "reviewer1", "-display-name", "Reviewer"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
+		t.Fatal("register reviewer1 failed")
+	}
+
 	var out, errOut bytes.Buffer
 	if code := run([]string{"send", "-workspace", dir, "-workspace-id", wsID,
 		"-caller", "engineer", "-request-id", "r1", "-message", "m1",

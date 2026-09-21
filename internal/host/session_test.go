@@ -41,6 +41,15 @@ func TestFrontendSession_BindsCallerAndDeepDetachesSnapshot(t *testing.T) {
 	if _, err := reviewer.RegisterAgent(ctx, task.RegisterAgentRequest{RequestID: "register-engineer", AgentID: "engineer", DisplayName: "Engineer"}); err != nil {
 		t.Fatal(err)
 	}
+	// H101-23/H101-109: SendMessage now checks RecipientAgentID against
+	// the registry too, so "reviewer" (the message recipient below) must
+	// itself be registered as an agent, not just configured as host
+	// reviewer authority. New baseline: 2 registered agents (god's
+	// ruling — this count is a completeness precondition for the
+	// mutation probes below, not the test's own claim).
+	if _, err := reviewer.RegisterAgent(ctx, task.RegisterAgentRequest{RequestID: "register-reviewer", AgentID: "reviewer", DisplayName: "Reviewer"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := reviewer.CreateTask(ctx, task.CreateTaskRequest{RequestID: "create-task", TaskID: "task-1", Title: "Inspect", AssigneeID: "engineer"}); err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +67,7 @@ func TestFrontendSession_BindsCallerAndDeepDetachesSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.Revision == 0 || snapshot.Cursor == "" || len(snapshot.Agents) != 1 || len(snapshot.Tasks) != 1 || len(snapshot.TaskResults) != 1 || len(snapshot.Messages) != 1 {
+	if snapshot.Revision == 0 || snapshot.Cursor == "" || len(snapshot.Agents) != 2 || len(snapshot.Tasks) != 1 || len(snapshot.TaskResults) != 1 || len(snapshot.Messages) != 1 {
 		t.Fatalf("incomplete snapshot: %+v", snapshot)
 	}
 	// Probe every nested mutable field exposed by the snapshot.

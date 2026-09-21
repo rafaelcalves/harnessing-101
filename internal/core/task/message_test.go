@@ -8,10 +8,30 @@ import (
 	"github.com/rafaelcalves/harnessing-101/internal/core/task"
 )
 
+// registerSenderAndRecipient is H101-23's ripple: SendMessage now checks
+// both SenderAgentID and RecipientAgentID against the registry
+// (engine.go), so every test below that sends a message must register
+// engineerID and reviewerID first, the same as CreateTask's assignee
+// check (1fcec3a) required for its own callers.
+func registerSenderAndRecipient(t *testing.T, ctx context.Context, e *task.Engine) {
+	t.Helper()
+	if _, err := e.RegisterAgent(ctx, caller(engineerID, false), task.RegisterAgentRequest{
+		RequestID: "reg-engineer", AgentID: engineerID, DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent(engineer): %v", err)
+	}
+	if _, err := e.RegisterAgent(ctx, caller(reviewerID, false), task.RegisterAgentRequest{
+		RequestID: "reg-reviewer", AgentID: reviewerID, DisplayName: "Reviewer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent(reviewer): %v", err)
+	}
+}
+
 func TestSendMessageAndRecipientAcknowledgement(t *testing.T) {
 	ctx := context.Background()
 	e, closeStore := newEngine(t, t.TempDir())
 	defer closeStore()
+	registerSenderAndRecipient(t, ctx, e)
 
 	_, err := e.SendMessage(ctx, caller(engineerID, false), task.SendMessageRequest{
 		RequestID: "send-1", MessageID: "message-1", SenderAgentID: engineerID,
@@ -87,6 +107,7 @@ func TestAcknowledgedMessageSurvivesRestart(t *testing.T) {
 	func() {
 		e, closeStore := newEngine(t, dir)
 		defer closeStore()
+		registerSenderAndRecipient(t, ctx, e)
 		if _, err := e.SendMessage(ctx, caller(engineerID, false), task.SendMessageRequest{
 			RequestID: "send-restart", MessageID: "message-restart", SenderAgentID: engineerID,
 			RecipientAgentID: reviewerID, Kind: domain.MessageInform, Body: "persist this",
@@ -115,6 +136,7 @@ func TestSendMessageUnknownReferencesNotFound(t *testing.T) {
 	ctx := context.Background()
 	e, closeStore := newEngine(t, t.TempDir())
 	defer closeStore()
+	registerSenderAndRecipient(t, ctx, e)
 
 	unknownTask := domain.TaskID("missing-task")
 	_, err := e.SendMessage(ctx, caller(engineerID, false), task.SendMessageRequest{
@@ -129,4 +151,56 @@ func TestSendMessageUnknownReferencesNotFound(t *testing.T) {
 		RecipientAgentID: reviewerID, Kind: domain.MessageInform, Body: "reply", ReplyToMessageID: &unknownMessage,
 	})
 	mustErrorCode(t, err, domain.ErrNotFound)
+}
+
+// H101-23 / Stanley's H101-109 ruling: SendMessage's own sender and
+// recipient references were checked for nonempty but never checked
+// against the agent registry, the same class of gap CreateTask's
+// AssigneeID had (1fcec3a). Named per-endpoint, exercising unknown
+// sender and unknown recipient separately with the OTHER endpoint
+// registered, per Stanley's suggested correction scope.
+func TestSendMessage_UnknownSenderNotFound(t *testing.T) {
+	ctx := context.Background()
+	e, closeStore := newEngine(t, t.TempDir())
+	defer closeStore()
+
+	if _, err := e.RegisterAgent(ctx, caller(reviewerID, false), task.RegisterAgentRequest{
+		RequestID: "reg-reviewer", AgentID: reviewerID, DisplayName: "Reviewer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent(reviewer): %v", err)
+	}
+
+	_, err := e.SendMessage(ctx, caller(engineerID, false), task.SendMessageRequest{
+		RequestID: "send-unknown-sender", MessageID: "message-unknown-sender",
+		SenderAgentID: "never-registered", RecipientAgentID: reviewerID,
+		Kind: domain.MessageRequest, Body: "hello",
+	})
+	mustErrorCode(t, err, domain.ErrNotFound)
+
+	if _, err := e.GetMessage(ctx, "message-unknown-sender"); err == nil {
+		t.Fatal("GetMessage found a message that a rejected SendMessage must not have committed")
+	}
+}
+
+func TestSendMessage_UnknownRecipientNotFound(t *testing.T) {
+	ctx := context.Background()
+	e, closeStore := newEngine(t, t.TempDir())
+	defer closeStore()
+
+	if _, err := e.RegisterAgent(ctx, caller(engineerID, false), task.RegisterAgentRequest{
+		RequestID: "reg-engineer", AgentID: engineerID, DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent(engineer): %v", err)
+	}
+
+	_, err := e.SendMessage(ctx, caller(engineerID, false), task.SendMessageRequest{
+		RequestID: "send-unknown-recipient", MessageID: "message-unknown-recipient",
+		SenderAgentID: engineerID, RecipientAgentID: "never-registered",
+		Kind: domain.MessageRequest, Body: "hello",
+	})
+	mustErrorCode(t, err, domain.ErrNotFound)
+
+	if _, err := e.GetMessage(ctx, "message-unknown-recipient"); err == nil {
+		t.Fatal("GetMessage found a message that a rejected SendMessage must not have committed")
+	}
 }

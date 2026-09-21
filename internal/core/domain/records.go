@@ -181,6 +181,16 @@ type MessageAcknowledgement struct {
 // timestamps: a missing later timestamp is not inferred from an earlier one.
 // Acknowledgement is explicit recipient action and does not mean the work is
 // complete.
+//
+// SenderAgentID, like Provenance.ClaimedAgentID, is a claimed identity, not
+// an authenticated one: SendMessage checks it against the agent registry
+// (membership) but never against the caller scope that submitted the
+// command (authorship). It is not renamed to a Claimed* form here because
+// this is a stored wire-format field shared with Envelope and read by every
+// adapter; the same caveat applies to RecipientAgentID, which additionally
+// gains no special claim status from being checked — a registered ID is
+// still just an address, not proof anyone at that address agreed to
+// anything.
 type Message struct {
 	WorkspaceID      WorkspaceID
 	MessageID        MessageID

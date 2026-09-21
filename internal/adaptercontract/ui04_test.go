@@ -154,6 +154,14 @@ func sendMessage(t *testing.T, ctx context.Context, driver Driver, env Workspace
 	var result Result
 	switch driver.Name() {
 	case "cli":
+		// H101-23/H101-109: SendMessage now checks SenderAgentID against
+		// the registry, so this deliberately-not-the-caller claimed
+		// sender (proving the claim is independent of -caller) must
+		// itself be registered — Kelly's H101-111 ruling (a): register
+		// it as a third agent rather than reuse an already-registered
+		// one, which would collapse sender into caller/recipient and
+		// erase the independence proof.
+		registerAgent(t, ctx, driver, env, "claimed-engineer", requestID+"-register-claimed-sender", "Claimed Engineer")
 		result = driver.Invoke(ctx, env, Call{
 			Caller: domain.AgentID(expected.EngineerID),
 			CLIArgs: []string{
@@ -169,9 +177,14 @@ func sendMessage(t *testing.T, ctx context.Context, driver Driver, env Workspace
 			},
 		})
 	case "throwaway":
+		// Cross-adapter parity per H101-111: throwaway's claimed sender
+		// now matches the CLI path's ("claimed-engineer") instead of
+		// equaling -caller, so both adapters exercise the same
+		// independent-claim property, not just the CLI one.
+		registerAgent(t, ctx, driver, env, "claimed-engineer", requestID+"-register-claimed-sender", "Claimed Engineer")
 		payload, _ := json.Marshal(map[string]interface{}{
 			"RequestID": requestID, "MessageID": messageID,
-			"SenderAgentID": expected.EngineerID, "RecipientAgentID": recipient,
+			"SenderAgentID": "claimed-engineer", "RecipientAgentID": recipient,
 			"Kind": "Request", "Body": body, "TaskID": taskID,
 		})
 		result = driver.Invoke(ctx, env, Call{

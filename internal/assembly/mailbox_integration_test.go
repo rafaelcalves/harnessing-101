@@ -24,6 +24,24 @@ func TestWithSession_FullMailboxPath_SendPublishProcessAck(t *testing.T) {
 	root := t.TempDir()
 	var stderr bytes.Buffer
 
+	// 0. H101-23's ripple: SendMessage now checks both SenderAgentID and
+	// RecipientAgentID against the registry, so both must be registered
+	// before step 1 can send between them.
+	for _, agent := range []struct{ caller, agentID string }{{"engineer", "engineer"}, {"reviewer", "reviewer"}} {
+		code := assembly.WithSession(&stderr, root, "ws1", nil, domain.AgentID(agent.caller), "register", func(ctx context.Context, s api.FrontendSession) int {
+			_, err := s.RegisterAgent(ctx, api.RegisterAgentRequest{
+				RequestID: domain.RequestID("reg-" + agent.agentID), AgentID: domain.AgentID(agent.agentID), DisplayName: agent.agentID,
+			})
+			if err != nil {
+				t.Fatalf("RegisterAgent(%s): %v", agent.agentID, err)
+			}
+			return 0
+		})
+		if code != 0 {
+			t.Fatalf("register session exit code = %d, stderr = %q", code, stderr.String())
+		}
+	}
+
 	// 1. engineer sends a message to reviewer. WithSession's own
 	// post-command mailbox drive (H101-85) runs immediately after this
 	// returns, in the SAME call: by the time this returns, DeliverPending

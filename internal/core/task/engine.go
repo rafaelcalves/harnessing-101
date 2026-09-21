@@ -597,6 +597,12 @@ func (e *Engine) SendMessage(ctx context.Context, caller CallerScope, req SendMe
 		if _, _, found := findMessage(snap, req.MessageID); found {
 			return nil, &domain.Error{Code: domain.ErrConflict, Detail: "messageID already exists"}
 		}
+		if _, _, found := findAgent(snap, req.SenderAgentID); !found {
+			return nil, &domain.Error{Code: domain.ErrNotFound, Detail: "sender is not a registered agent"}
+		}
+		if _, _, found := findAgent(snap, req.RecipientAgentID); !found {
+			return nil, &domain.Error{Code: domain.ErrNotFound, Detail: "recipient is not a registered agent"}
+		}
 		if req.TaskID != nil {
 			if _, _, found := findTask(snap, *req.TaskID); !found {
 				return nil, &domain.Error{Code: domain.ErrNotFound, Detail: "task not found"}

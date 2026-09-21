@@ -98,6 +98,14 @@ func TestCLI_Phase2ProductWalkthroughSubprocess(t *testing.T) {
 		t.Fatalf("stale transition did not render Conflict: exit=%d stderr=%s", conflict.code, conflict.stderr)
 	}
 
+	// H101-23's ripple: SendMessage now checks SenderAgentID against the
+	// registry too, so the deliberately-not-the-caller claimed sender
+	// below (proving the claim is independent of -caller) must itself be
+	// registered. No task- or workspace-revision literal downstream of
+	// this depends on the exact commit count, so the extra registration
+	// is safe here (unlike the frozen adaptercontract UI-04 fixture).
+	succeed("register", "-workspace", dir, "-workspace-id", wsID, "-reviewer", reviewer, "-caller", "claimed-engineer", "-request-id", "r4-register-claimed-sender", "-agent", "claimed-engineer", "-display-name", "Claimed Engineer")
+
 	// Handoff, blocker, resolution, and human reject/rework/accept.
 	succeed("send", "-workspace", dir, "-workspace-id", wsID, "-reviewer", reviewer, "-caller", "engineer", "-request-id", "r5", "-message", "m1", "-recipient", "analyst", "-kind", "Request", "-body", "Please investigate", "-sender", "claimed-engineer", "-task", "t1")
 	pending := call("messages", "-workspace", dir, "-workspace-id", wsID, "-recipient", "analyst")

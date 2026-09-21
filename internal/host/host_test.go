@@ -128,6 +128,19 @@ func TestAssembly_WrongRecipientAcknowledgeDenied(t *testing.T) {
 	ctx := context.Background()
 	caps := openWorkspace(t, t.TempDir())
 
+	// H101-23's ripple: SendMessage now checks both SenderAgentID and
+	// RecipientAgentID against the registry.
+	if _, err := caps.RegisterAgent(ctx, engineerID, task.RegisterAgentRequest{
+		RequestID: "reg-engineer", AgentID: engineerID, DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent(engineer): %v", err)
+	}
+	if _, err := caps.RegisterAgent(ctx, reviewerID, task.RegisterAgentRequest{
+		RequestID: "reg-reviewer", AgentID: reviewerID, DisplayName: "Reviewer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent(reviewer): %v", err)
+	}
+
 	if _, err := caps.SendMessage(ctx, engineerID, task.SendMessageRequest{
 		RequestID: "req-send", MessageID: "msg-1", SenderAgentID: engineerID, RecipientAgentID: reviewerID,
 		Kind: domain.MessageInform, Body: "status update",
@@ -170,6 +183,16 @@ func TestAssembly_LegitimateAcceptAndAckSurviveReopen(t *testing.T) {
 			RequestID: "req-accept", TaskID: taskID, ResultID: "res-1", ExpectedTaskRevision: 3,
 		}); err != nil {
 			t.Fatalf("AcceptTaskResult: %v", err)
+		}
+
+		// H101-23's ripple: SendMessage now checks RecipientAgentID
+		// against the registry too; createDoingTask already registered
+		// engineerID, but reviewerID (message recipient below) has not
+		// been registered as an agent yet.
+		if _, err := caps.RegisterAgent(ctx, reviewerID, task.RegisterAgentRequest{
+			RequestID: "reg-reviewer", AgentID: reviewerID, DisplayName: "Reviewer",
+		}); err != nil {
+			t.Fatalf("RegisterAgent(reviewer): %v", err)
 		}
 
 		if _, err := caps.SendMessage(ctx, engineerID, task.SendMessageRequest{

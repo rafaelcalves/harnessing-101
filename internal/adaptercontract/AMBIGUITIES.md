@@ -101,11 +101,21 @@ says, what it fails to say, and what `expected/` currently assumes instead.
 - **Equivalent committed cut:** same named groups and terminal facts, mailbox
   recording complete, no unrelated requests before snapshot. Receipt revision
   may precede final snapshot revision.
-- **UI-04 final cut:** 12 user-request groups + 2 delivery-record groups =
-  **revision 14** (derived from declared groups, not observed output).
+- **UI-04 final cut:** 13 user-request groups + 2 delivery-record groups =
+  **revision 15** (derived from declared groups, not observed output).
+  **Amended per H101-109/H101-23/H101-111 (Kelly, ruling (a)):** H101-109
+  requires `SendMessage`'s `SenderAgentID` to be a registered agent; the
+  cycle's claimed sender (`claimed-engineer`, deliberately distinct from
+  the caller to prove the claim's independence) is now a third
+  registration, one more group than the original H101-94 cut counted.
+  This is arithmetic following from a legitimate engine change, not a
+  new architectural claim about what a "group" is.
 
 **What `expected/` now asserts**
 
-- `UI04CycleEnd.WorkspaceRevision = 14` with task terminal state at that cut.
+- `UI04CycleEnd.WorkspaceRevision = 15`, `AgentCount = 3` (engineer,
+  analyst, claimed-engineer), with task terminal state at that cut.
 - Cross-adapter comparison uses harness snapshot after full cycle (both adapters
-  drive mailbox via assembly on each invocation).
+  drive mailbox via assembly on each invocation). Both adapters now send as
+  `claimed-engineer` rather than the throwaway path uniquely setting
+  `SenderAgentID == caller` — H101-111's cross-adapter parity requirement.

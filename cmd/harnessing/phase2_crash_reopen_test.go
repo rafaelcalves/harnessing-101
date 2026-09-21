@@ -45,6 +45,12 @@ func TestRun_Phase2CycleRecoversAfterKilledCLI(t *testing.T) {
 	// Leave the task AwaitingReview with an acknowledged handoff and a
 	// durable result: this is real product state, not an empty lock fixture.
 	runCLI("register", "-workspace", dir, "-workspace-id", wsID, "-reviewer", "reviewer1", "-caller", "engineer", "-request-id", "r1", "-agent", "engineer", "-display-name", "Engineer")
+	// H101-23's ripple: SendMessage now checks RecipientAgentID against
+	// the registry too, so reviewer1 (message recipient below) must be
+	// registered as an agent, not just configured as host reviewer
+	// authority. Task revision arithmetic below is unaffected — this is
+	// one more workspace commit, not a task mutation.
+	runCLI("register", "-workspace", dir, "-workspace-id", wsID, "-reviewer", "reviewer1", "-caller", "reviewer1", "-request-id", "r1-register-reviewer1", "-agent", "reviewer1", "-display-name", "Reviewer")
 	runCLI("create", "-workspace", dir, "-workspace-id", wsID, "-reviewer", "reviewer1", "-caller", "engineer", "-request-id", "r2", "-task", "t1", "-title", "Investigate", "-assignee", "engineer")
 	runCLI("transition", "-workspace", dir, "-workspace-id", wsID, "-reviewer", "reviewer1", "-caller", "engineer", "-request-id", "r3", "-task", "t1", "-from", "Todo", "-to", "Doing")
 	runCLI("send", "-workspace", dir, "-workspace-id", wsID, "-reviewer", "reviewer1", "-caller", "engineer", "-request-id", "r4", "-message", "m1", "-recipient", "reviewer1", "-kind", "Request", "-body", "Please review", "-task", "t1")
