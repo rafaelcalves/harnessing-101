@@ -50,3 +50,39 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.13.2
+
+  # H101-102: native darwin/arm64 evidence on every change, superseding
+  # docs/quality/darwin-arm64-milestone-manifest-2026-09-21.md's one-machine,
+  # one-date manual run per Kelly's H101-55 ruling. macos-14 runners are
+  # Apple silicon (arm64) — see
+  # https://github.com/actions/runner-images/blob/main/images/macos/macos-14-Readme.md.
+  # The three test commands below are exactly the manifest's recorded
+  # commands, unchanged, so this runner is provably re-running the same
+  # contract rather than a redesigned one. No hostname or /Users/ path is
+  # ever printed, matching the manifest's own redaction (H101-100).
+  darwin-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5.1.0
+        with:
+          go-version: "1.27.1"
+      - name: Record runner platform (no hostname, no operator paths)
+        run: |
+          sw_vers
+          echo "kernel: $(uname -s) $(uname -r) $(uname -m)"
+          go version
+      - name: Build
+        run: go build ./...
+      - name: Test (full suite)
+        run: go test ./...
+      - name: Item 1 — §2 subprocess product walkthrough (manifest command, unchanged)
+        run: go test -count=1 -v ./cmd/harnessing -run TestCLI_Phase2ProductWalkthroughSubprocess
+      - name: Item 2 — crash reopen with persisted product state (manifest command, unchanged)
+        run: go test -count=1 -v ./cmd/harnessing -run TestRun_Phase2CycleRecoversAfterKilledCLI
+      - name: Item 2 prerequisite — lock recovery after owner crash, H101-20 (manifest command, unchanged)
+        run: go test -count=1 -v ./internal/adapters/statestore/ -run 'Recover|SecondOpen'
+      - name: Vet
+        run: go vet ./...
+      - name: Check gofmt
+        run: ./scripts/check-gofmt.sh
