@@ -222,6 +222,11 @@ requires:
 
 ### Item 6 — Background hosting survives UI detach
 
+**Ruled H101-143 (2026-09-21):** **NOT SATISFIED** at `18af1ec` — hosting foundation
+only (`harnessing serve` + attach/detach); run half blocked on item 1. Mailbox pump
+omission is correct scoping, not an item 6 gap. See
+[`h101-143-phase3-item6-foundation-ruling.md`](h101-143-phase3-item6-foundation-ruling.md).
+
 Boundaries hosting inference: closing one UI does not stop runs managed by a continuing
 host; explicit host shutdown requests termination.
 
@@ -240,6 +245,17 @@ Provable via subprocess test:
 | D2 | No way to observe run after starting CLI exits | **Product** | Background hosting missing |
 | D3 | Second workspace writer opened while host lives | **Product** | Lock/ownership breach |
 | D4 | Test runs in-process without subprocess | **Test** | Detach semantics not proven |
+| D5 | Foundation hosting proved (serve/attach/lock) but no `StartRun` / no `Running` observability | **Progress only** | H101-143 — not item 6 discharge; extend test when item 1 lands |
+
+---
+
+## H101-143 — Item 6 foundation slice (2026-09-21)
+
+**Verdict: NOT SATISFIED.** `18af1ec` lands hosting foundation (`serve`, transport,
+attach/detach, lock); does not discharge item 6 until item 1 exists and full
+four-step proof passes. Mailbox pump: correct scoping for slice, not item 6 gap;
+card under serve completeness separately. Full ruling:
+[`h101-143-phase3-item6-foundation-ruling.md`](h101-143-phase3-item6-foundation-ruling.md).
 
 ---
 
