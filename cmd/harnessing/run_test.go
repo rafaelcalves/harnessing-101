@@ -55,7 +55,7 @@ func TestRun_DisclosureCaveatPrecedesReassuranceAcrossSemicolon(t *testing.T) {
 	if caveat == -1 || reassurance == -1 {
 		t.Fatalf("disclosure clauses not found (caveat=%d reassurance=%d): %q", caveat, reassurance, disclosure)
 	}
-	if !(caveat < reassurance) {
+	if caveat >= reassurance {
 		t.Fatalf("disclosure clause order = caveat at %d, reassurance at %d; want caveat before the semicolon so truncation there drops the reassurance, not the caveat: %q", caveat, reassurance, disclosure)
 	}
 }
