@@ -11,6 +11,7 @@ Usage:
   harnessing version
   harnessing task       -workspace <dir> [-workspace-id <id>] <taskID>
   harnessing message    -workspace <dir> [-workspace-id <id>] <messageID>
+  harnessing messages   -workspace <dir> [-workspace-id <id>] [-recipient <agentID>]
   harnessing hold        -workspace <dir> [-workspace-id <id>] [-reviewer <id>]...
   harnessing register    -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -agent <id> -display-name <name> [-profile-id <id>]
   harnessing update      -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -agent <id> [-display-name <name>] [-profile-id <id>]
@@ -54,6 +55,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runTask(args[1:], stdout, stderr)
 	case "message":
 		return runMessage(args[1:], stdout, stderr)
+	case "messages":
+		return runMessages(args[1:], stdout, stderr)
 	case "hold":
 		return runHold(args[1:], stdout, stderr)
 	case "register":

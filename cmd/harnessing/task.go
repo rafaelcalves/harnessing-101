@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
 	"github.com/rafaelcalves/harnessing-101/internal/host"
@@ -27,17 +28,37 @@ func runTask(args []string, stdout, stderr io.Writer) int {
 	taskID := domain.TaskID(fs.Arg(0))
 
 	return withCapabilities(stderr, wf, "task", func(ctx context.Context, caps host.Capabilities) int {
-		t, err := caps.GetTask(ctx, taskID)
+		snapshot, err := caps.GetSnapshot(ctx)
 		if err != nil {
 			_, _ = fmt.Fprintln(stderr, "harnessing task: "+describeError(err))
 			return 1
 		}
-		printTask(stdout, t)
+		var task *domain.Task
+		for i := range snapshot.Tasks {
+			if snapshot.Tasks[i].ID == taskID {
+				task = &snapshot.Tasks[i]
+				break
+			}
+		}
+		if task == nil {
+			_, _ = fmt.Fprintln(stderr, "harnessing task: "+describeError(&domain.Error{Code: domain.ErrNotFound, Detail: "task not found"}))
+			return 1
+		}
+		var result *domain.TaskResult
+		if task.CurrentResultID != nil {
+			for i := range snapshot.TaskResults {
+				if snapshot.TaskResults[i].ResultID == *task.CurrentResultID {
+					result = &snapshot.TaskResults[i]
+					break
+				}
+			}
+		}
+		printTask(stdout, *task, result)
 		return 0
 	})
 }
 
-func printTask(w io.Writer, t domain.Task) {
+func printTask(w io.Writer, t domain.Task, result *domain.TaskResult) {
 	_, _ = fmt.Fprintf(w, "Task %s\n", t.ID)
 	_, _ = fmt.Fprintf(w, "  Title:      %s\n", t.Title)
 	_, _ = fmt.Fprintf(w, "  Status:     %s\n", t.Status)
@@ -50,4 +71,14 @@ func printTask(w io.Writer, t domain.Task) {
 	}
 	_, _ = fmt.Fprintf(w, "  Created by: %s (claimed sender, %s, %s)\n",
 		t.Provenance.ClaimedAgentID, t.Provenance.EntryMechanism, t.Provenance.IdentityVerification)
+	if result != nil {
+		_, _ = fmt.Fprintf(w, "  Reporter:   %s (claimed reporter, %s)\n", result.Provenance.ClaimedAgentID, result.Provenance.IdentityVerification)
+		_, _ = fmt.Fprintf(w, "  Last update: %s\n", result.Provenance.RecordedAt.Format(time.RFC3339Nano))
+	} else if t.Status == domain.TaskTodo {
+		_, _ = fmt.Fprintf(w, "  Reporter:   %s (claimed creator, %s)\n", t.Provenance.ClaimedAgentID, t.Provenance.IdentityVerification)
+		_, _ = fmt.Fprintf(w, "  Last update: %s\n", t.Provenance.RecordedAt.Format(time.RFC3339Nano))
+	} else {
+		_, _ = fmt.Fprintln(w, "  Reporter:   (unavailable; status-update provenance is not recorded)")
+		_, _ = fmt.Fprintln(w, "  Last update: (unavailable; status-update timestamp is not recorded)")
+	}
 }

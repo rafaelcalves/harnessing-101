@@ -92,7 +92,15 @@ func TestCLI_Phase2ProductWalkthroughSubprocess(t *testing.T) {
 
 	// Handoff, blocker, resolution, and human reject/rework/accept.
 	succeed("send", "-workspace", dir, "-workspace-id", wsID, "-reviewer", reviewer, "-caller", "engineer", "-request-id", "r5", "-message", "m1", "-recipient", "analyst", "-kind", "Request", "-body", "Please investigate", "-sender", "claimed-engineer", "-task", "t1")
+	pending := call("messages", "-workspace", dir, "-workspace-id", wsID, "-recipient", "analyst")
+	if pending.code != 0 || !strings.Contains(pending.stdout, "Pending messages: 1") || !strings.Contains(pending.stdout, "Message m1") || !strings.Contains(pending.stdout, "Acknowledged: (absent)") {
+		t.Fatalf("pending message list did not expose the waiting handoff: exit=%d stdout=%s stderr=%s", pending.code, pending.stdout, pending.stderr)
+	}
 	succeed("ack", "-workspace", dir, "-workspace-id", wsID, "-caller", "analyst", "-request-id", "r6", "-message", "m1")
+	cleared := call("messages", "-workspace", dir, "-workspace-id", wsID, "-recipient", "analyst")
+	if cleared.code != 0 || !strings.Contains(cleared.stdout, "Pending messages: 0") {
+		t.Fatalf("acknowledged handoff remained pending: exit=%d stdout=%s stderr=%s", cleared.code, cleared.stdout, cleared.stderr)
+	}
 	succeed("transition", "-workspace", dir, "-workspace-id", wsID, "-reviewer", reviewer, "-caller", "engineer", "-request-id", "r7", "-task", "t1", "-from", "Doing", "-to", "Blocked", "-reason", "Need evidence")
 	status("Blocked")
 	succeed("transition", "-workspace", dir, "-workspace-id", wsID, "-reviewer", reviewer, "-caller", "engineer", "-request-id", "r8", "-task", "t1", "-from", "Blocked", "-to", "Doing")
@@ -116,6 +124,17 @@ func TestCLI_Phase2ProductWalkthroughSubprocess(t *testing.T) {
 	final := succeed("task", "-workspace", dir, "-workspace-id", wsID, "t1")
 	if !strings.Contains(final, "ResultID:   res2") {
 		t.Fatalf("reopened process lost accepted replacement: %q", final)
+	}
+	reporter := outputField(final, "  Reporter:")
+	if reporter == "" {
+		t.Fatalf("reopened task omitted reporter field: %q", final)
+	}
+	reporterVerification := strings.TrimSuffix(reporter[strings.LastIndex(reporter, ", ")+2:], ")")
+	if reporterVerification != string(domain.IdentityUnverified) {
+		t.Fatalf("task reporter identity verification = %q, want %q", reporterVerification, domain.IdentityUnverified)
+	}
+	if outputField(final, "  Last update:") == "" {
+		t.Fatalf("reopened task omitted last-update field: %q", final)
 	}
 
 	// The message query makes the handoff and its provenance visible through
