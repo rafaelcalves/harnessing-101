@@ -320,6 +320,10 @@ not silently waived.
 
 ### Item 9 — Runnable local startup guide
 
+**Ruled H101-138 (2026-09-21):** **SATISFIED WITH LIMIT** — coordination guide
+accepted at `6d12c48`; Phase 3 process-control supplement pending. See
+[`h101-138-phase3-item9-guide-ruling.md`](h101-138-phase3-item9-guide-ruling.md).
+
 **Acceptance procedure, not CI.** Satisfied when:
 
 1. A committed guide (path TBD by docs owner — e.g. `docs/GETTING-STARTED.md` or
@@ -343,6 +347,24 @@ the **exit gate** on that deliverable.
 | D2 | Cold-read required human on floor | **Docs** | Gap per H101-120 class |
 | D3 | Guide references uncommitted or internal-only paths | **Docs** | Not reproducible |
 | D4 | Phase 3 exit claimed without cold-read record | **Process** | Item 9 not discharged |
+| D5 | Coordination guide accepted but Phase 3 process-control section not yet runnable | **Expected limit** | H101-138 — supplement + second cold-read when items 1–7 ship |
+
+---
+
+## H101-138 — Item 9 guide acceptance (2026-09-21)
+
+**Verdict: SATISFIED WITH LIMIT.**
+
+Coordination-cycle guide and H101-137 cold-read **discharged** the owner's
+runnable-workflow ask and definition.md §5 for the current product. **Limit:**
+Phase 3 `StartRun`/`StopRun`/budget walkthrough not in guide or cold-read until
+process control ships; full item 9 / Phase 3 exit requires supplement + second
+cold-read.
+
+H101-125 checklist **A16 retired**; **A16'** = empty-inbox `messages` exits 0,
+no H101-122 regression. Amend checklist before next formal cold-read; not a
+blocker to this ruling. Full ruling:
+[`h101-138-phase3-item9-guide-ruling.md`](h101-138-phase3-item9-guide-ruling.md).
 
 ---
 
