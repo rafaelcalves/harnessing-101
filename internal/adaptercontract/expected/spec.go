@@ -1,6 +1,9 @@
 // Package expected holds scenario literals derived from ADR 0003, boundaries.md,
 // and domain rules — compiled before any adapter runs. Nothing here reads
 // adapter output.
+//
+// Where the spec is silent, assumptions are written up in ../AMBIGUITIES.md
+// (not in literals) so H101-91 can review them without inferring from tests.
 package expected
 
 import (

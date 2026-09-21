@@ -1,23 +1,33 @@
 package adaptercontract_test
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
+	"github.com/rafaelcalves/harnessing-101/internal/api"
+	"github.com/rafaelcalves/harnessing-101/internal/assembly"
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
-	"github.com/rafaelcalves/harnessing-101/internal/host"
 )
 
+// harnessSnapshot reads workspace state through the same assembly →
+// FrontendSession path adapters use. It does not import host — item 4's
+// "assembly sole host importer" should not gain a silent second importer in
+// this package (H101-92).
 func harnessSnapshot(t *testing.T, env WorkspaceEnv) domain.Snapshot {
 	t.Helper()
-	caps, err := host.Open(env.Root, env.WorkspaceID, env.Reviewers)
-	if err != nil {
-		t.Fatalf("host.Open: %v", err)
-	}
-	defer caps.Close()
-	snap, err := caps.GetSnapshot(context.Background())
-	if err != nil {
-		t.Fatalf("GetSnapshot: %v", err)
+	var stderr bytes.Buffer
+	var snap domain.Snapshot
+	var snapErr error
+	code := assembly.WithSession(&stderr, env.Root, env.WorkspaceID, env.Reviewers, "", "snapshot", func(ctx context.Context, session api.FrontendSession) int {
+		snap, snapErr = session.GetSnapshot(ctx)
+		if snapErr != nil {
+			return 1
+		}
+		return 0
+	})
+	if code != 0 {
+		t.Fatalf("harness snapshot: exit=%d err=%v stderr=%q", code, snapErr, stderr.String())
 	}
 	return snap
 }

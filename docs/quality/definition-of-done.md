@@ -1912,3 +1912,56 @@ Until one of those triggers fires, documenting the call-graph limit in this revi
 | 7 | **Satisfied** |
 | 8 | **Satisfied** |
 | 9 | **N/A** |
+
+---
+
+## H101-90 — adaptercontract suite stage 1 (UI-01..04) (2026-09-21)
+
+**Verdict:** STAGE 1 COMPLETE — UI-01 through UI-04 run green on **both** adapters (`go test ./internal/adaptercontract/`). **Paused** for god commit before UI-05..08. Stanley independence review: H101-91.
+
+**Package:** `internal/adaptercontract/` — `expected/spec.go` (spec-derived literals only) + `AMBIGUITIES.md` + CLI subprocess driver + throwaway JSON driver + harness reads via `assembly.WithSession` → `GetSnapshot` (no `host` import; H101-92).
+
+### Stage 1 coverage
+
+| Scenario | Tests | CLI | Throwaway | Fixture source |
+| --- | --- | --- | --- | --- |
+| **UI-01** | `TestUI01_MalformedInputNoMutation`, `TestUI01_ValidRegisterPreservesIDs` | pass | pass | ADR UI-01; empty-workspace revision rule |
+| **UI-02** | `TestUI02_ReceiptDistinctFromTaskStatus`, `TestUI02_DeniedAndConflictStableCodes` | pass | pass | ADR UI-02; `domain.ErrDenied` / `ErrConflict` |
+| **UI-03** | `TestUI03_IdempotentRetrySameReceipt`, `TestUI03_ChangedPayloadSameRequestIDConflicts` | pass | pass | ADR UI-03; one-commit-per-successful-command rule |
+| **UI-04** | `TestUI04_FullCycleDomainOutcomes` | pass | pass | ADR UI-04 + product definition §2 cycle; terminal task `Done` + `res2` |
+
+### Spec ambiguities (substance in `internal/adaptercontract/AMBIGUITIES.md`)
+
+Full writeups live in the repo for Stanley H101-91. Summary:
+
+| ID | Spec says | Spec fails to say | Literal assumes instead |
+| --- | --- | --- | --- |
+| **A1** (UI-03) | Generated IDs surfaced for interrupted callers; request-id idempotency | Whether caller-supplied entity IDs count as “generated”; what surface = “surfaced” | Request ID + revision on receipt = recoverable identity; entity IDs pre-held by caller |
+| **A2** (UI-02) | IOFailure uncertainty messaging; stable codes | Whether stage 1 needs fsync fault injection; OutcomeUncertain vs IOFailure assert target | Stage 1 = Denied/Conflict + receipt/status split only; IOFailure deferred |
+| **A3** (UI-04) | Identical domain outcomes for full cycle | Whether workspace revision counts when mailbox adds commits after send/ack | `UI04CycleEnd` asserts task fields only, not revision (12 user cmds vs 14 observed) |
+
+### Adapter divergences (stage 1)
+
+**None.** Both adapters pass the same independently specified domain assertions. Rendering differs (CLI stderr receipt line vs throwaway JSON `Response`); semantic checks use harness snapshot and stable error codes.
+
+### Stage 2 scope (not started — stage 1 committed `9d2cce5`)
+
+UI-05..08 including Phase 3 `Unsupported` on `StartRun`/`StopRun`/`SetRunBudget`, snapshot enumeration, observer/restart scenarios per H101-53/H101-70, detachment probe, crossover and concurrent-observer cases.
+
+---
+
+## H101-92 — ambiguities on disk + host import (2026-09-21)
+
+**Verdict:** ADDRESSED — ambiguities written to `internal/adaptercontract/AMBIGUITIES.md`; `host` import removed from suite.
+
+### God Q1 — ambiguities not recorded
+
+**Fixed.** `AMBIGUITIES.md` in the adaptercontract package (linked from `expected/spec.go` doc comment). DoD table above cross-references. Substance was only in outbox message for `9d2cce5`; now in repo for Stanley.
+
+### God Q2 — why `host`, and allowlist exception?
+
+**Why it was there:** `harnessSnapshot` called `host.Open` + `GetSnapshot` for independent mutation checks (ADR 0003 §suite: host as composition entry). **Unnecessary:** `assembly.WithSession` → `api.FrontendSession.GetSnapshot` observes the same committed state without importing `host`.
+
+**Allowlist exception:** **No.** Do not add a second `host` importer entry like statestore’s test exception. The suite should not import `host`; harness now uses assembly only. Import set: `api`, `assembly`, `domain`, `throwawayadapter`, `expected` (+ stdlib).
+
+**Stage 2:** proceeds; H101-55 darwin manifest can run in parallel — not sequencing ahead unless you redirect.
