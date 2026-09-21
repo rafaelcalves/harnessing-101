@@ -45,7 +45,8 @@ func (d *cliDriver) Invoke(ctx context.Context, env WorkspaceEnv, call Call) Res
 	if len(call.CLIArgs) == 0 {
 		return Result{ExitCode: 1, Stderr: "missing CLI command"}
 	}
-	args := joinCLI(cliWorkspaceArgs(env), call.CLIArgs...)
+	// Subcommand must be argv[1]; workspace flags follow (cmd/harnessing/run.go).
+	args := joinCLI(joinCLI([]string{call.CLIArgs[0]}, cliWorkspaceArgs(env)...), call.CLIArgs[1:]...)
 	return d.run(ctx, args)
 }
 
