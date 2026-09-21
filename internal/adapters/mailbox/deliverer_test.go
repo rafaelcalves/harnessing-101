@@ -25,7 +25,8 @@ type fakeRecorder struct {
 		caller domain.AgentID
 		msgID  domain.MessageID
 	}
-	denyAckFor domain.MessageID
+	denyAckFor     domain.MessageID
+	notFoundAckFor domain.MessageID
 }
 
 func (f *fakeRecorder) GetSnapshot(ctx context.Context) (domain.Snapshot, error) {
@@ -57,6 +58,9 @@ func (f *fakeRecorder) RecordMessageProcessed(ctx context.Context, req api.Messa
 func (f *fakeRecorder) AcknowledgeMessage(ctx context.Context, callerAgentID domain.AgentID, req api.AcknowledgeMessageRequest) (domain.Receipt, error) {
 	if req.MessageID == f.denyAckFor {
 		return domain.Receipt{}, &domain.Error{Code: domain.ErrDenied, Detail: "not the recipient"}
+	}
+	if req.MessageID == f.notFoundAckFor {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrNotFound, Detail: "message not found"}
 	}
 	f.acked = append(f.acked, struct {
 		caller domain.AgentID
@@ -191,6 +195,38 @@ func TestDeliverer_IngestAcks_GoesThroughAcknowledgeMessageAndQuarantinesDenied(
 	}
 	if len(remaining) != 1 || remaining[0].ControlRecordID != "c2" {
 		t.Fatalf("remaining acks = %+v, want the denied c2 record quarantined (left in place), c1 archived", remaining)
+	}
+}
+
+// TestDeliverer_IngestAcks_QuarantinesNotFound is Kelly's H101-83 naming
+// gap (divergence F): NotFound was already handled in code (same
+// quarantine branch as Denied) but had no test of its own — same
+// per-scenario naming rule as item 7. This names it, exactly as she
+// asked, rather than folding it silently into the Denied test.
+func TestDeliverer_IngestAcks_QuarantinesNotFound(t *testing.T) {
+	m, _ := mustOpen(t)
+	if err := m.WriteAck("reviewer", domain.MessageAcknowledgement{
+		SchemaVersion: 1, ControlRecordID: "c1", OriginalMessageID: "m1", RecipientAgentID: "reviewer",
+	}); err != nil {
+		t.Fatalf("WriteAck: %v", err)
+	}
+
+	rec := &fakeRecorder{notFoundAckFor: "m1"}
+	d := mailbox.NewDeliverer(m, rec)
+
+	if err := d.IngestAcks(context.Background(), "reviewer"); err != nil {
+		t.Fatalf("IngestAcks: %v", err)
+	}
+	if len(rec.acked) != 0 {
+		t.Fatalf("acked = %+v, want none — the engine reported NotFound", rec.acked)
+	}
+
+	remaining, err := m.ScanAcks("reviewer")
+	if err != nil {
+		t.Fatalf("ScanAcks: %v", err)
+	}
+	if len(remaining) != 1 || remaining[0].ControlRecordID != "c1" {
+		t.Fatalf("remaining acks = %+v, want the NotFound record quarantined (left in place), not archived and not lost", remaining)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
 )
@@ -152,11 +153,20 @@ func TestCLI_Phase2ProductWalkthroughSubprocess(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Sender:      claimed-engineer",
-		"Queued:", "Published:   (absent)", "Processed:   (absent)",
+		"Queued:", "Published:", "Processed:",
 		"Acknowledged:", "by analyst", "Task:        t1",
 	} {
 		if !strings.Contains(message.stdout, want) {
 			t.Fatalf("message output missing %q: %s", want, message.stdout)
+		}
+	}
+	for _, field := range []string{"  Queued:", "  Published:", "  Processed:"} {
+		value := outputField(message.stdout, field)
+		if value == "" || value == "(absent)" {
+			t.Fatalf("message output missing delivered timestamp for %q: %s", field, message.stdout)
+		}
+		if _, err := time.Parse(time.RFC3339Nano, value); err != nil {
+			t.Fatalf("message output timestamp %q for %q is not RFC3339: %v", value, field, err)
 		}
 	}
 	recordedBy := outputField(message.stdout, "  Recorded by:")
