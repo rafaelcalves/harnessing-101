@@ -104,3 +104,21 @@ Status: **Proposed for review**, 2026-09-19. Author: Stanley, Architect. Card: H
 
 
 **RULING — H101-94 revision comparison.** Apply boundaries.md's “workspace revision arithmetic and commit groups” ruling to canonical observations: a fresh workspace starts at 0, each new atomic commit group advances once, and mailbox delivery-record groups count. Compare exact numeric revisions at the named equivalent committed cut; never substitute command count, erase revisions, or compare an original receipt with a later snapshot as though they were the same cut. The specified UI-04 final cut has fourteen groups and revision 14. This is a new explicit arithmetic contract; the earlier traceability review correctly found no source for it in the documents then available.
+
+## H101-128 — proposed Phase 3 extension (2026-09-21)
+
+**Status: proposed design; no implementation/acceptance claim.** Kelly's [Phase 3 criteria](../quality/phase3-exit-criteria.md) fix the required behavior. [H101-128](../architecture/h101-128-phase3-supervision.md) and proposed [ADR 0005](0005-single-owner-supervision.md) define the continuing host and effect boundaries; unresolved deadline/tree-scope rulings there must not be hidden by a test fixture.
+
+Extend neutral FrontendSession with typed run/operation/capability queries and persisted output read/follow. A transport proxy retains the actual caller-bound restricted surface. Runs, operations and nonsecret approval references are discoverable in detached snapshots; raw process handles, approval authority and host lifecycle never leak to presentation.
+
+| ID | Phase 3 contract on each real adapter driver |
+| --- | --- |
+| UI-09 | Approved, authorized start returns a durable receipt/operation and reaches observable Running; unapproved profile and claimed-message-sender-only authority fail without spawn. Old content provenance stays unverified. |
+| UI-10 | Explicit stop produces observed owned-group termination and terminal state, preserving request/operation replay; no fake-supervisor termination verdict. |
+| UI-11 | An installed elapsed budget triggers core termination and real observed exit under Kelly's resolved timing contract. Reported-token enforcement and unsupported-reporting refusal remain mandatory item-3 evidence; this row does not waive them. |
+| UI-12 | Read/resume real persisted stdout/stderr through RunOutput, separately from StateEvents; cancellation detaches the reader only and capture interruption remains visible. |
+| UI-13 | In supervision-enabled hosting, valid StartRun/StopRun/SetRunBudget return success or documented asynchronous receipt/operation rather than blanket Unsupported. Capability-specific unavailable functions still return Unsupported honestly. |
+
+Run each scenario against both adapters with independently declared observations and limits, then start on A and observe/stop on B after rebind. Enter real parsers/handlers; direct host calls are composition, not interaction proof. Real process/output effects are mandatory where indicated. Mock error paths cannot replace native product-surface evidence. Preserve supplied IDs, meaningful revision cuts, provenance and operation outcomes; do not compare OS scheduling-dependent intermediate revisions as though both runs shared a schedule.
+
+UI-01–08 retain their semantics. Their Phase 2 blanket Unsupported fixture must become an explicit **capability-disabled** host case, not a requirement on the new enabled product. UI-13 covers enabled hosting; unsupported token reporting and the inherited Windows exclusion remain negative cases. This is the declared phase-boundary change, not quiet deletion of UI-08. Existing G-limits remain scoped exactly as Kelly recorded; no new waiver or Phase 2 reopening follows.
