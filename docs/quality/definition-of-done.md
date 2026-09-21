@@ -1988,4 +1988,22 @@ Single-machine disclosed manifest — weaker than CI. **Replacement:** macOS CI 
 ### God follow-ups (H101-55, still want)
 
 1. **macOS CI runner** — raise **now** (manifest done; runner replaces manual re-runs).
-2. **Windows exclusion smoke** — still want it carded for Phase 2 exit (Unsupported workspace ops; version/help work).
+2. **Windows exclusion smoke** — carded H101-101; ruled H101-103 below.
+
+---
+
+## H101-103 — Windows exclusion smoke (`2545f42`) (2026-09-21)
+
+**Verdict: SATISFIED WITH LIMIT** — Kevin's compile-only guard discharges the exit check Kelly proposed.
+
+**What Kelly asked for:** Phase 2 exit assertion that Windows is **excluded by design** — workspace operations return stable `Unsupported`; `version`/`help` still work. Not Windows support.
+
+**What landed (`2545f42`):** `lock_windows_test.go` + `windows_unsupported_test.go` (`//go:build windows`); CI `GOOS=windows` whole-product `go build` + `go vet` of windows-tagged tests. Documented in [`h101-101-windows-exclusion.md`](h101-101-windows-exclusion.md).
+
+**Ruling — workspace path:** **Satisfied.** The substantive claim is that the **product path** refuses workspace work cleanly (`assembly.WithSession` → non-zero exit, `Unsupported` on stderr, session body never runs). Compile-time proof is proportionate for an **out-of-scope** platform: ADR 0001 excludes Windows; the check asserts defined refusal, not feature correctness. In-scope targets (darwin) still owe **executed** evidence — asymmetric by design, not budget overriding criteria.
+
+**Ruling — `version`/`help` not named in tests:** **Acceptable.** They never call `WithSession` (`run.go`); no Windows-specific branch exists on that path. Whole-product `GOOS=windows` build of `cmd/harnessing` is sufficient structural proof they compile; a dedicated runtime test would add no exclusion evidence Kelly's check was written to capture.
+
+**Limit recorded:** Proves **shape**, not Windows **runtime** behaviour (`go vet` does not execute test bodies; no Windows runner). Acceptable for this exclusion check. Would **not** discharge an in-scope platform. Stronger proof (paid runner or one manual `.exe` run) is optional hygiene, not required to mark this exit sub-check satisfied.
+
+**God budget note:** Disproportionate to pay for Windows execution to prove correct refusal — aligns with this ruling; does not extend to darwin/macOS runner.
