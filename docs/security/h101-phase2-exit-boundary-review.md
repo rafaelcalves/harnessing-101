@@ -135,3 +135,27 @@ its own documentation exactly, which is itself the main finding worth recording:
 did not quietly widen or narrow the SendMessage exposure named in Phase 0 — it shipped
 the first real surface onto an unchanged, honestly-labeled gap. That is a real result,
 not an absence of one.
+
+---
+
+## Correction (2026-09-21, after H101-119)
+
+The reviewer revised this review's own item 2 verdict after the architecture
+ruling in `h101-119-provenance-sender-durability.md` (`ac0dda2`) found the
+fixture protects less than this review credited. In the reviewer's words:
+
+> Original wording: "a regression guard proving the system won't silently start
+> enforcing SenderAgentID==caller." That's wrong as stated — it only proves the
+> system won't LOUDLY start enforcing it, because a rejection on differing
+> sender/caller would fail the fixture.
+
+> Corrected wording for the record: "The adaptercontract fixture proves the
+> command does not REJECT a sender that differs from the caller. It does not
+> prove the two identities are stored, returned, and reopened as distinct
+> values — a silent coercion of one into the other would pass this fixture
+> undetected. Kelly/Stanley's remedy (explicit caller/sender assertions across
+> query, reopen, and three local mutation checks, ac0dda2) is what actually
+> closes that gap; the original fixture alone did not."
+
+The risk was ranked correctly as a durability concern held by one test rather
+than a hard guard; what was undersold was how thin that one test was.
