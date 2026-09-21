@@ -84,6 +84,16 @@ type Capabilities interface {
 	// the session-bound version for a UI adapter to actually hold.
 	ResolveRequest(ctx context.Context, callerAgentID domain.AgentID, requestID domain.RequestID) (domain.Receipt, error)
 
+	// Subscribe is inbound port 3 (H101-61): observe committed events
+	// from a cursor — typically GetSnapshot's own Cursor — without
+	// losing anything committed after it. Events are workspace facts,
+	// not caller-scoped, so this takes no callerAgentID — same as
+	// GetSnapshot. A cursor this process can no longer resume from
+	// (e.g. from a prior process, or older than this process's
+	// retained history) returns ErrCursorExpired rather than silently
+	// starting empty.
+	Subscribe(ctx context.Context, afterCursor string) (<-chan domain.Event, error)
+
 	// Close releases the workspace lock. It does not delete state.
 	Close() error
 }
@@ -200,6 +210,10 @@ func (w *workspace) ResolveRequest(ctx context.Context, callerAgentID domain.Age
 	return w.engine.ResolveRequest(ctx, callerAgentID, requestID)
 }
 
+func (w *workspace) Subscribe(ctx context.Context, afterCursor string) (<-chan domain.Event, error) {
+	return w.engine.Subscribe(ctx, afterCursor)
+}
+
 // FrontendSession is the caller-bound surface for a user interface. It has
 // no caller ID parameter, lifecycle method, mailbox integration, or storage
 // handle. The composition owner binds the caller once and retains the
@@ -229,6 +243,10 @@ type FrontendSession interface {
 	// would let a session ask about a DIFFERENT principal's requests —
 	// exactly the mistake this binding exists to prevent.
 	ResolveRequest(ctx context.Context, requestID domain.RequestID) (domain.Receipt, error)
+
+	// Subscribe observes committed events from a cursor. Not
+	// caller-scoped, same as GetSnapshot — see Capabilities.Subscribe.
+	Subscribe(ctx context.Context, afterCursor string) (<-chan domain.Event, error)
 }
 
 type frontendSession struct {
@@ -285,6 +303,9 @@ func (s *frontendSession) GetSnapshot(ctx context.Context) (domain.Snapshot, err
 }
 func (s *frontendSession) ResolveRequest(ctx context.Context, requestID domain.RequestID) (domain.Receipt, error) {
 	return s.caps.ResolveRequest(ctx, s.caller, requestID)
+}
+func (s *frontendSession) Subscribe(ctx context.Context, afterCursor string) (<-chan domain.Event, error) {
+	return s.caps.Subscribe(ctx, afterCursor)
 }
 
 func (w *workspace) Close() error {

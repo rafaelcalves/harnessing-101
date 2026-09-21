@@ -39,10 +39,22 @@ type Engine struct {
 	clock       ports.Clock
 	ids         ports.IDSource
 	workspaceID domain.WorkspaceID
+	events      *eventBus
 }
 
 func NewEngine(store ports.StateStore, clock ports.Clock, ids ports.IDSource, workspaceID domain.WorkspaceID) *Engine {
-	return &Engine{store: store, clock: clock, ids: ids, workspaceID: workspaceID}
+	return &Engine{store: store, clock: clock, ids: ids, workspaceID: workspaceID, events: newEventBus()}
+}
+
+// Subscribe is inbound port 3 (ports.StateEvents), promoted onto Engine
+// (H101-61): observe committed events from a cursor — typically
+// GetSnapshot's own Cursor — without losing anything committed after it.
+// See eventBus's doc comment for the no-lost-commits argument this rests
+// on, and note its actual limit: retention is this process's lifetime
+// only, so a cursor from a process that is no longer running comes back
+// CursorExpired, not silently empty.
+func (e *Engine) Subscribe(ctx context.Context, afterCursor string) (<-chan domain.Event, error) {
+	return e.events.subscribe(ctx, afterCursor)
 }
 
 // CreateTaskRequest is version 1's CreateTask payload (boundaries.md
@@ -784,13 +796,28 @@ func (e *Engine) event(ctx context.Context, kind string, at time.Time, subjects 
 }
 
 func (e *Engine) commit(ctx context.Context, caller CallerScope, requestID domain.RequestID, fp string, mutate func(*domain.Snapshot) ([]domain.Event, error)) (domain.Receipt, error) {
-	receipt, _, err := e.store.Commit(ctx, e.workspaceID, ports.CommitRequest{
+	receipt, events, err := e.store.Commit(ctx, e.workspaceID, ports.CommitRequest{
 		CallerAgentID:      caller.AgentID,
 		RequestID:          requestID,
 		PayloadFingerprint: fp,
 		Mutate:             mutate,
 	})
-	return receipt, err
+	if err != nil {
+		return receipt, err
+	}
+	// A replay of an already-recorded request returns its original
+	// receipt with no new events (StateStore's own contract) — publish
+	// only ever sees fresh commits, so replays cannot duplicate an
+	// event a subscriber already saw.
+	if len(events) > 0 {
+		stamped := make([]domain.Event, len(events))
+		for i, ev := range events {
+			ev.WorkspaceRevision = receipt.CommittedRevision
+			stamped[i] = ev
+		}
+		e.events.publish(stamped)
+	}
+	return receipt, nil
 }
 
 func fingerprint(parts ...any) string {
