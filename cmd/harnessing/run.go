@@ -13,6 +13,7 @@ Usage:
   harnessing message    -workspace <dir> [-workspace-id <id>] <messageID>
   harnessing messages   -workspace <dir> [-workspace-id <id>] [-recipient <agentID>]
   harnessing hold        -workspace <dir> [-workspace-id <id>] [-reviewer <id>]...
+  harnessing serve       -workspace <dir> [-workspace-id <id>] [-reviewer <id>]...
   harnessing register    -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -agent <id> -display-name <name> [-profile-id <id>]
   harnessing update      -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -agent <id> [-display-name <name>] [-profile-id <id>]
   harnessing create      -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -task <id> -title <title> [-assignee <id>]
@@ -60,6 +61,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runMessages(args[1:], stdout, stderr)
 	case "hold":
 		return runHold(args[1:], stdout, stderr)
+	case "serve":
+		return runServe(args[1:], stdout, stderr)
 	case "register":
 		return runRegister(args[1:], stdout, stderr)
 	case "update":
