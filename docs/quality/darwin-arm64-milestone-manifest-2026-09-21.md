@@ -124,3 +124,50 @@ ok  	github.com/rafaelcalves/harnessing-101/internal/adapters/statestore	0.173s
 
 1. **macOS CI runner** — raised to human (spend/account decision).
 2. **Windows exclusion smoke** — carded to Kevin as H101-101 (Phase 2 exit check, not support).
+
+---
+
+## H101-102 — macOS CI runner landed (2026-09-21)
+
+The human approved a `macos-14` (Apple silicon, arm64) job in
+`.github/workflows/ci.yml` (`darwin-arm64`, commit `f6075fa`),
+alongside the existing `ubuntu-latest` job, on every push and pull
+request. This is the "stronger replacement" this manifest names above.
+
+**What the runner now proves, on every change, that this manifest could
+only prove once:**
+
+- The exact three commands recorded above — item 1's subprocess
+  walkthrough, item 2's crash-reopen, and item 2's H101-20 lock
+  prerequisite — run unmodified, natively, on `darwin/arm64`, on every
+  push/PR, not on one machine on one date.
+- `go build`, the full `go test ./...`, `go vet`, and the gofmt guard
+  all run natively on `darwin/arm64` as well, catching a
+  darwin-only build break or test failure this manifest's narrower
+  scope would have missed.
+
+**What it still does not prove:**
+
+- **Item 3 (adapter contract) is still not discharged on darwin** —
+  the new job does not add a darwin-specific `adaptercontract` step
+  beyond what `go test ./...` already runs; that gap is unchanged from
+  the table above and is not this card's scope to close.
+- **Cross-target handoff-acknowledgement survival** (item 2, overall)
+  remains open on both targets per prior rulings; this card was
+  explicitly told not to attempt it (a separate card follows once the
+  runner exists).
+- **This manifest is not deleted or superseded by this commit alone** —
+  that is Kelly's call, not something decided here. It stays as the
+  disclosed record of the one run that first satisfied H101-55 before
+  a runner existed.
+- **The runner's own first real execution inside GitHub's macOS fleet
+  was not directly observed when this section was written** — the
+  environment used to write this change had an invalid GitHub
+  credential (`gh auth status` failed), so every command above was
+  verified by native local reproduction on a `darwin/arm64` machine
+  (macOS 27.0, `go1.27.1 darwin/arm64`) rather than by watching the
+  Actions run itself. See the commit message on `f6075fa` for the
+  exact output watched. That distinction — local native reproduction
+  of every step vs. a confirmed green run inside GitHub Actions
+  itself — is reported to `god` as still open, not folded into this
+  manifest's own evidence.
