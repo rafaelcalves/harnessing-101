@@ -84,6 +84,26 @@ type MessageDeliveryRequest struct {
 	MessageID domain.MessageID
 }
 
+type StartRunRequest struct {
+	RequestID domain.RequestID
+	RunID     string
+	AgentID   domain.AgentID
+	ProfileID string
+}
+
+type StopRunRequest struct {
+	RequestID domain.RequestID
+	RunID     string
+	Reason    string
+}
+
+type SetRunBudgetRequest struct {
+	RequestID          domain.RequestID
+	RunID              string
+	ElapsedTimeLimit   *uint64
+	ReportedTokenLimit *uint64
+}
+
 // FrontendSession is the caller-bound interface a presentation adapter may
 // hold. It has no lifecycle, mailbox, storage, or caller-identity authority.
 type FrontendSession interface {
@@ -96,6 +116,9 @@ type FrontendSession interface {
 	RejectTaskResult(context.Context, RejectTaskResultRequest) (domain.Receipt, error)
 	SendMessage(context.Context, SendMessageRequest) (domain.Receipt, error)
 	AcknowledgeMessage(context.Context, AcknowledgeMessageRequest) (domain.Receipt, error)
+	StartRun(context.Context, StartRunRequest) (domain.Receipt, error)
+	StopRun(context.Context, StopRunRequest) (domain.Receipt, error)
+	SetRunBudget(context.Context, SetRunBudgetRequest) (domain.Receipt, error)
 	GetAgent(context.Context, domain.AgentID) (domain.Agent, error)
 	GetTask(context.Context, domain.TaskID) (domain.Task, error)
 	GetMessage(context.Context, domain.MessageID) (domain.Message, error)

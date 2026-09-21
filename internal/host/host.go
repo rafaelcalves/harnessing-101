@@ -260,6 +260,22 @@ func (s *frontendSession) SendMessage(ctx context.Context, req task.SendMessageR
 func (s *frontendSession) AcknowledgeMessage(ctx context.Context, req task.AcknowledgeMessageRequest) (domain.Receipt, error) {
 	return s.caps.AcknowledgeMessage(ctx, s.caller, req)
 }
+
+func (s *frontendSession) StartRun(context.Context, api.StartRunRequest) (domain.Receipt, error) {
+	return domain.Receipt{}, unsupportedPhase3("StartRun")
+}
+
+func (s *frontendSession) StopRun(context.Context, api.StopRunRequest) (domain.Receipt, error) {
+	return domain.Receipt{}, unsupportedPhase3("StopRun")
+}
+
+func (s *frontendSession) SetRunBudget(context.Context, api.SetRunBudgetRequest) (domain.Receipt, error) {
+	return domain.Receipt{}, unsupportedPhase3("SetRunBudget")
+}
+
+func unsupportedPhase3(operation string) error {
+	return &domain.Error{Code: domain.ErrUnsupported, Detail: operation + " is not implemented in Phase 2"}
+}
 func (s *frontendSession) GetAgent(ctx context.Context, id domain.AgentID) (domain.Agent, error) {
 	return s.caps.GetAgent(ctx, id)
 }
