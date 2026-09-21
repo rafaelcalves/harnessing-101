@@ -124,6 +124,11 @@ func (e *Engine) CreateTask(ctx context.Context, caller CallerScope, req CreateT
 		if _, _, found := findTask(snap, req.TaskID); found {
 			return nil, &domain.Error{Code: domain.ErrConflict, Detail: "taskID already exists"}
 		}
+		if req.AssigneeID != "" {
+			if _, _, found := findAgent(snap, req.AssigneeID); !found {
+				return nil, &domain.Error{Code: domain.ErrNotFound, Detail: "assignee is not a registered agent"}
+			}
+		}
 
 		now := e.clock.WallNow()
 		newTask := domain.Task{

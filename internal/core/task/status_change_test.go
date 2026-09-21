@@ -17,6 +17,12 @@ func TestLastStatusChange_SetOnCreationAndEveryRealTransition(t *testing.T) {
 	e, closeStore := newEngine(t, t.TempDir())
 	defer closeStore()
 
+	if _, err := e.RegisterAgent(ctx, caller(engineerID, false), task.RegisterAgentRequest{
+		RequestID: "reg-r1", AgentID: engineerID, DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
+
 	if _, err := e.CreateTask(ctx, caller(engineerID, false), task.CreateTaskRequest{
 		RequestID: "r1", TaskID: "t1", Title: "x", AssigneeID: engineerID,
 	}); err != nil {
@@ -64,6 +70,12 @@ func TestLastStatusChange_ReplayAndDenialDoNotAdvanceIt(t *testing.T) {
 	ctx := context.Background()
 	e, closeStore := newEngine(t, t.TempDir())
 	defer closeStore()
+
+	if _, err := e.RegisterAgent(ctx, caller(engineerID, false), task.RegisterAgentRequest{
+		RequestID: "reg-r1", AgentID: engineerID, DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
 
 	if _, err := e.CreateTask(ctx, caller(engineerID, false), task.CreateTaskRequest{
 		RequestID: "r1", TaskID: "t1", Title: "x", AssigneeID: engineerID,
@@ -122,6 +134,12 @@ func TestLastStatusChange_DetachedFromQueryResult(t *testing.T) {
 	ctx := context.Background()
 	e, closeStore := newEngine(t, t.TempDir())
 	defer closeStore()
+
+	if _, err := e.RegisterAgent(ctx, caller(engineerID, false), task.RegisterAgentRequest{
+		RequestID: "reg-r1", AgentID: engineerID, DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
 
 	if _, err := e.CreateTask(ctx, caller(engineerID, false), task.CreateTaskRequest{
 		RequestID: "r1", TaskID: "t1", Title: "x", AssigneeID: engineerID,

@@ -60,6 +60,14 @@ func TestUI06_ObserveFromSnapshotCursor(t *testing.T) {
 	h := openContractHarness(t, env)
 	defer func() { _ = h.Close() }()
 	ctx := context.Background()
+
+	writer := h.Bind(domain.AgentID(expected.EngineerID))
+	if _, err := writer.RegisterAgent(ctx, api.RegisterAgentRequest{
+		RequestID: "ui06-obs-r0", AgentID: domain.AgentID(expected.EngineerID), DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
+
 	observer := h.Bind(domain.AgentID(expected.AnalystID))
 	snap, err := observer.GetSnapshot(ctx)
 	if err != nil {
@@ -70,7 +78,6 @@ func TestUI06_ObserveFromSnapshotCursor(t *testing.T) {
 		t.Fatalf("Subscribe: %v", err)
 	}
 
-	writer := h.Bind(domain.AgentID(expected.EngineerID))
 	if _, err := writer.CreateTask(ctx, api.CreateTaskRequest{
 		RequestID: "ui06-obs-r1", TaskID: "ui06-t2", Title: "After cursor", AssigneeID: domain.AgentID(expected.EngineerID),
 	}); err != nil {
@@ -92,6 +99,11 @@ func TestUI06_StaleCursorAfterRestart(t *testing.T) {
 	ctx := context.Background()
 
 	first := openContractHarness(t, env)
+	if _, err := first.Bind(domain.AgentID(expected.EngineerID)).RegisterAgent(ctx, api.RegisterAgentRequest{
+		RequestID: "ui06-restart-r0", AgentID: domain.AgentID(expected.EngineerID), DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
 	snap, err := first.Bind(domain.AgentID(expected.EngineerID)).GetSnapshot(ctx)
 	if err != nil {
 		t.Fatalf("GetSnapshot: %v", err)

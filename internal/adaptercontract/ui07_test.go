@@ -57,13 +57,19 @@ func TestUI07_DetachDoesNotCancelOtherSession(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	writer := h.Bind(domain.AgentID(expected.EngineerID))
+	if _, err := writer.RegisterAgent(ctx, api.RegisterAgentRequest{
+		RequestID: "ui07-r0", AgentID: domain.AgentID(expected.EngineerID), DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
+
 	observer := h.Bind(domain.AgentID(expected.AnalystID))
 	events, err := observer.Subscribe(ctx, "0")
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
 
-	writer := h.Bind(domain.AgentID(expected.EngineerID))
 	if _, err := writer.CreateTask(ctx, api.CreateTaskRequest{
 		RequestID: "ui07-r1", TaskID: "ui07-t1", Title: "before detach", AssigneeID: domain.AgentID(expected.EngineerID),
 	}); err != nil {

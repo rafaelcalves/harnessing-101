@@ -33,6 +33,11 @@ func TestSubscribe_RestartCursorIsExpired(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	firstEngine := task.NewEngine(firstStore, clock.NewSystem(), idsource.Random{}, workspaceID)
+	if _, err := firstEngine.RegisterAgent(ctx, caller(engineerID, false), task.RegisterAgentRequest{
+		RequestID: "reg-r1", AgentID: engineerID, DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
 	snap, err := firstEngine.CreateTask(ctx, caller(engineerID, false), task.CreateTaskRequest{
 		RequestID: "r1", TaskID: "t1", Title: "x", AssigneeID: engineerID,
 	})
@@ -78,6 +83,11 @@ func TestSubscribe_RestartThenFreshSnapshotCursorWorks(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	firstEngine := task.NewEngine(firstStore, clock.NewSystem(), idsource.Random{}, workspaceID)
+	if _, err := firstEngine.RegisterAgent(ctx, caller(engineerID, false), task.RegisterAgentRequest{
+		RequestID: "reg-r1", AgentID: engineerID, DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
 	if _, err := firstEngine.CreateTask(ctx, caller(engineerID, false), task.CreateTaskRequest{
 		RequestID: "r1", TaskID: "t1", Title: "x", AssigneeID: engineerID,
 	}); err != nil {
@@ -134,6 +144,12 @@ func TestEngine_ConcurrentCommitsPublishInOrder(t *testing.T) {
 	e, closeStore := newEngine(t, t.TempDir())
 	defer closeStore()
 
+	if _, err := e.RegisterAgent(ctx, caller(engineerID, false), task.RegisterAgentRequest{
+		RequestID: "reg-r1", AgentID: engineerID, DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
+
 	events, err := e.Subscribe(ctx, "0")
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
@@ -189,6 +205,12 @@ func TestEventBus_MultiEventCommitIsDeliveredWhole(t *testing.T) {
 	e, closeStore := newEngine(t, t.TempDir())
 	defer closeStore()
 	ctx := context.Background()
+
+	if _, err := e.RegisterAgent(ctx, caller(engineerID, false), task.RegisterAgentRequest{
+		RequestID: "reg-r1", AgentID: engineerID, DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
 
 	// Real commits in this engine only ever produce one event each, so
 	// this observes ordinary single-event commits and asserts they

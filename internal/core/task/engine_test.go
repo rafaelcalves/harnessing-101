@@ -48,6 +48,11 @@ func mustErrorCode(t *testing.T, err error, want domain.ErrorCode) {
 
 func createDoingTask(t *testing.T, ctx context.Context, e *task.Engine, taskID domain.TaskID) {
 	t.Helper()
+	if _, err := e.RegisterAgent(ctx, caller(engineerID, false), task.RegisterAgentRequest{
+		RequestID: domain.RequestID("reg-" + string(taskID)), AgentID: engineerID, DisplayName: "Engineer",
+	}); err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
 	if _, err := e.CreateTask(ctx, caller(engineerID, false), task.CreateTaskRequest{
 		RequestID:  domain.RequestID("req-create-" + string(taskID)),
 		TaskID:     taskID,
@@ -145,6 +150,29 @@ func TestReportTaskResult_EmptyResultIDRejected(t *testing.T) {
 	}
 	if got.Status != domain.TaskDoing {
 		t.Fatalf("status after rejected report = %s, want unchanged Doing", got.Status)
+	}
+}
+
+// H101-108 / Stanley's G5: boundaries.md B:24 says unknown IDs fail
+// NotFound. CreateTask's AssigneeID is a command-payload agent ID like
+// any other, so an assignee that was never registered must fail the
+// same way — this was unenforced in the engine itself, not just in a
+// harness fixture that forgot to call RegisterAgent first.
+func TestCreateTask_UnregisteredAssigneeNotFound(t *testing.T) {
+	ctx := context.Background()
+	e, closeStore := newEngine(t, t.TempDir())
+	defer closeStore()
+
+	_, err := e.CreateTask(ctx, caller(engineerID, false), task.CreateTaskRequest{
+		RequestID:  "req-create-unregistered",
+		TaskID:     "t-unregistered-assignee",
+		Title:      "assign to nobody",
+		AssigneeID: "never-registered",
+	})
+	mustErrorCode(t, err, domain.ErrNotFound)
+
+	if _, err := e.GetTask(ctx, "t-unregistered-assignee"); err == nil {
+		t.Fatal("GetTask found a task that a rejected CreateTask must not have committed")
 	}
 }
 
@@ -268,6 +296,10 @@ func TestDuplicateDecisionCreatesNoDuplicateFacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first AcceptTaskResult: %v", err)
 	}
+	afterFirstAccept, err := e.GetTask(ctx, taskID)
+	if err != nil {
+		t.Fatalf("GetTask (after first accept): %v", err)
+	}
 
 	t.Run("same request ID replays, no new fact", func(t *testing.T) {
 		r2, err := e.AcceptTaskResult(ctx, caller(reviewerID, true), acceptReq)
@@ -281,8 +313,8 @@ func TestDuplicateDecisionCreatesNoDuplicateFacts(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetTask: %v", err)
 		}
-		if got.Status != domain.TaskDone || got.Revision != r1.CommittedRevision {
-			t.Fatalf("task state changed by replay: status=%s revision=%d", got.Status, got.Revision)
+		if got.Status != domain.TaskDone || got.Revision != afterFirstAccept.Revision {
+			t.Fatalf("task state changed by replay: status=%s revision=%d, want status=%s revision=%d unchanged from before the replay", got.Status, got.Revision, domain.TaskDone, afterFirstAccept.Revision)
 		}
 	})
 
