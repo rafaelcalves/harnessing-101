@@ -4,8 +4,8 @@ This guide takes you from a clean clone to one completed task with two agent
 identities and one human reviewer. You will assign work, record a handoff,
 acknowledge it, record and resolve a blocker, report a result, and accept it.
 
-The workflow was run against commit `e2357a9` on 2026-09-21. Every write step
-completed. One known read-path defect is called out where it occurs.
+The workflow was run against commit `7401b52` on 2026-09-21. Every documented
+step completed with the output shown below.
 
 ## What this guide does—and does not—connect
 
@@ -44,16 +44,22 @@ The unreleased local build reports version `dev`. Every invocation also prints
 the three-line local-only and unverified-content disclosure to standard error.
 The examples below omit that repeated disclosure but show the command result.
 
-Choose a new workspace path and reuse these two shell variables for the rest of
-the guide:
+Create a workspace outside the source clone, then reuse these two shell
+variables for the rest of the guide:
 
 ```sh
 H="./bin/harnessing"
-WORKSPACE="$PWD/harnessing-demo"
+mkdir -p "$HOME/harnessing-workspaces"
+WORKSPACE="$(mktemp -d "$HOME/harnessing-workspaces/getting-started.XXXXXX")"
+printf 'Workspace: %s\n' "$WORKSPACE"
 ```
 
-Do not reuse a populated path: the request identifiers in this guide are
-idempotency keys, and replaying one returns its original receipt.
+`mktemp` gives this run a new empty directory. Keeping workspace data outside
+the clone prevents task and message content from appearing as untracked Git
+files and later being published by an accidental `git add -A`. For real work,
+choose another durable path outside a source repository. Do not reuse a
+populated path for this guide: its request identifiers are idempotency keys, and
+replaying one returns its original receipt.
 
 ## 2. Understand the three identities
 
@@ -147,13 +153,6 @@ Message msg-1
   Recorded by: agent-one (claimed sender, command, unverified)
 ```
 
-> **Known blocker (H101-122):** at commit `e2357a9`, this command prints the
-> record above but then incorrectly adds
-> `harnessing messages: mailbox delivery: InvalidArgument: id must not be empty`.
-> The process exits 0. That line is a product defect, not expected behaviour and
-> not a user setup error. The output shown above is how this step should read
-> after H101-122 is fixed.
-
 Record `agent-two`'s acknowledgement:
 
 ```sh
@@ -208,10 +207,6 @@ Task task-1
   ResultID:   (none)
   Reporter:   agent-one (claimed reporter, unverified)
 ```
-
-At commit `e2357a9`, this read command can append the same H101-122 mailbox
-delivery error described in step 5. The task fields are still returned, but the
-extra error is not expected behaviour.
 
 ## 7. Report and accept the result
 
@@ -281,15 +276,12 @@ Message msg-1
   Recorded by: agent-one (claimed sender, command, unverified)
 ```
 
-At commit `e2357a9`, these read commands can append the H101-122 error described
-in step 5. The durable records are returned, but the extra error remains a defect.
-
 ## What is written on disk
 
 Everything is below the directory passed to `-workspace`:
 
 ```text
-harnessing-demo/
+getting-started.<random>/
 ├── state.json
 └── mailbox/
     └── agent-two/
