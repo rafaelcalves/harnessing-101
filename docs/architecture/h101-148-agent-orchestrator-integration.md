@@ -69,3 +69,40 @@ Before acceptance, run one real installed tool through inspect → decompose/ass
 No runtime enforcement, security acceptance, tool compatibility or successful trial is claimed here. Creed reviewed the proposed shape and found it sound subject to four explicit invariants: lifetime identity binding, in-flight revocation semantics, immutable workspace binding and the inherited control-channel limitation. Creed completed a clean second pass on both documents on 2026-09-21: all four invariants correctly incorporated, no new findings (review message `creed-2026-09-21-h101-148-secondpass-reply`). This is design-review evidence, not construction approval or runtime verification. The decision least certain is allowing workspace-wide reads while restricting mutations by delegation: it fits the existing snapshot contract, but a future objective-level confidentiality requirement would require a different query policy, not stronger skill wording.
 
 Sources: Angela's H101-146 memory/ruling; H101-148 dispatch; H101-128 and H101-135; H101-109/H101-119; H101-38; ADRs 0002–0005. No code, tests, installed-tool calls or .git writes.
+
+
+## H101-150 — delegation-scoped reads and quota strength (2026-09-21)
+
+**This amendment supersedes the earlier workspace-wide-read choice and uniform “quota” shorthand; original text remains as history.** Agree with Creed's H101-149 ruling: normal authorized disclosure to every orchestrator is not equivalent to hostile same-user filesystem compromise. Scoped reads are required for the proposed role from its first implementation, not deferred to a future skill instruction. This is design only; construction and a before-release deadline remain unapproved.
+
+### Distinct query capability
+
+Give the role a concrete `DelegatedSession` exposing `GetDelegationView`, scoped task/message/result/human-decision lookups and scoped observation. It must not expose or be downcastable to the ordinary unscoped `FrontendSession.GetSnapshot`, registry enumeration or global event/output streams. Keep neutral data types in the API layer, policy in core, binding in host, and transport in its adapter. Existing unscoped views for other authorized roles retain their contract; no new architectural port is required.
+
+The host derives delegation identity from the frozen session, never a request's asserted delegation ID. Compute visibility from authoritative task membership on one consistent state/policy revision:
+
+- Tasks created through the delegation are atomically stamped with its identity by the host. Existing tasks enter only through an explicit human-authorized binding record. Assignment to an eligible worker, a matching objective string, or an agent-supplied reference does not add membership. Membership changes advance policy revision; delegated sessions cannot add/remove bindings themselves.
+- Eligible workers appear as identity/reference records only: allowed AgentIDs and necessary eligibility facts, not their unrelated tasks, messages, profile configuration or registry metadata.
+- Messages, results and human-decision requests are visible only when their authoritative task reference is in scope. Unlinked records stay invisible by default, even if the orchestrator is their sender. Delegated sends/decision requests must bind a scoped task; worker replies preserve that link. A reference does not recursively include another task or a reply's out-of-scope parent.
+- Process-management grants do not imply access to a worker's other run history. Run/operation metadata and output require an authorized run binding to a scoped task and an explicit observation permission; unbound existing runs may receive an explicitly granted stop action without exposing their output. Responses reveal only the minimum authorized operation result.
+
+Return purpose-built projected records: do not serialize a complete snapshot and ask the skill to filter it. Remove out-of-scope nested identifiers, expanded objects and links, reporting a typed withheld-reference marker where needed. Artifact references are not permission to fetch arbitrary files; any host artifact-read endpoint requires independent scope/path checks. In-scope free text or child output can itself quote unrelated content; record filtering is not semantic redaction or a data-loss-prevention guarantee.
+
+Apply the same policy to point reads, lists/search/counts, event payloads, output, errors, receipts and transport responses. For a valid session, nonexistent and out-of-scope object lookups both return NotFound without confirming hidden existence. Wrong workspace or invalid/revoked session is denied before object lookup. Scoped observation uses an opaque delegation/policy-bound cursor, not a global event feed filtered in presentation; changes to membership invalidate the cursor and require a new scoped view. Check current policy before releasing each response/stream batch and discard queued material made inaccessible by revocation. Already delivered content cannot be recalled.
+
+Preserve original receipt identity/revision under ADR 0004; return only the session's own authorized receipt records, never a raw ledger. Existing workspace-revision numbers in receipts can reveal aggregate activity; this amendment does not promise timing/metadata isolation. Full mutual confidentiality would require review of that metadata, shared worker output, storage and provider exposure as well as record filtering.
+
+### Named revisit condition: multiple confidential objectives
+
+The current product assumption is **one individual, one bounded project, one workspace trust domain**. The scoped API narrows ordinary exposure now. Before a workspace is offered for simultaneously delegated, mutually confidential objectives—separate clients, projects or tenants—reopen this design with security/product review and prove the stronger confidentiality policy before that use ships. Workspace-wide delegated reads are unacceptable for that use; the same-user exclusion cannot waive the required API policy. This trigger remains even after scoped reads exist because they alone do not establish tenant isolation. The prior clean four-invariant review is not approval of this new use case or evidence that this amendment is implemented.
+
+### Separate quota guarantees
+
+| Limit | Guarantee on supported host paths | Limitation |
+| --- | --- | --- |
+| Task/start counts and concurrent-run ceiling | **Hard host-enforced admission ceilings:** atomic reservations and host observations prevent extra admissions; retries do not reset counters. | Unknown runs retain reservations; actions outside the host remain outside this control. |
+| Reported-token ceiling | **Soft with respect to actual consumption; conditional on self-reported telemetry:** core triggers real termination at the reported threshold. | Underreporting and reporting/termination delay allow actual usage or spend beyond the limit; not a hard provider-billing cap. |
+
+Keep these as separate rows in capability descriptions, grants and acceptance summaries. Atomic accounting does not make the measurement trustworthy. Missing/malformed telemetry still invokes the declared failure-stop policy; it does not solve dishonest telemetry. Elapsed-time enforcement retains Phase 3's separately ruled timing/exit semantics.
+
+Required future evidence: two delegations sharing a worker cannot enumerate each other's records; guessed IDs, nested references, global-event attempts and run output do not bypass scope; only explicit human task binding broadens reads; revocation/membership change blocks queued reads and expires cursors. Independently demonstrate hard admission races and reported-token termination, including honest underreporting limitations. No code/tests or .git writes.
