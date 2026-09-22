@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,6 +37,7 @@ var StartupWindow = 500 * time.Millisecond
 // caller-supplied path.
 type Supervisor struct {
 	ContextDir string
+	Journal    ports.OutputJournal
 }
 
 // contextFile is R2's "documented protocol handoff" payload: the only
@@ -97,8 +99,8 @@ func (s *Supervisor) Start(ctx context.Context, runID domain.RunID, spec domain.
 	}
 
 	var combined bytes.Buffer
-	cmd.Stdout = &combined
-	cmd.Stderr = &combined
+	cmd.Stdout = io.MultiWriter(&combined, journalWriter{ctx: ctx, journal: s.Journal, runID: runID, channel: "stdout"})
+	cmd.Stderr = io.MultiWriter(&combined, journalWriter{ctx: ctx, journal: s.Journal, runID: runID, channel: "stderr"})
 
 	if err := cmd.Start(); err != nil {
 		return &domain.Error{Code: domain.ErrSpawnFailed, Detail: err.Error()}
@@ -124,6 +126,23 @@ func (s *Supervisor) Start(ctx context.Context, runID domain.RunID, spec domain.
 		// participant. Leave it running, unowned by this call.
 		return nil
 	}
+}
+
+type journalWriter struct {
+	ctx     context.Context
+	journal ports.OutputJournal
+	runID   domain.RunID
+	channel string
+}
+
+func (w journalWriter) Write(p []byte) (int, error) {
+	if w.journal == nil {
+		return len(p), nil
+	}
+	if _, err := w.journal.Append(w.ctx, w.runID, w.channel, append([]byte(nil), p...), time.Now()); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 func (s *Supervisor) writeContextFile(runID domain.RunID, participation domain.RunParticipationContext) (string, error) {

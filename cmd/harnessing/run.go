@@ -26,6 +26,7 @@ Usage:
   harnessing approve-profile -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -profile-id <id> -tool-executable <path> [-tool-argv-json <json>]
   harnessing start-run    -workspace <dir> [-workspace-id <id>] [-caller <id>] [-request-id <id>] -run <id> -agent <id> -profile-id <id> [-task <id>] [-tool-executable <path>] [-tool-argv-json <json>]
   harnessing run          -workspace <dir> [-workspace-id <id>] <runID>
+  harnessing run-output   -workspace <dir> [-workspace-id <id>] <runID>
   harnessing operation    -workspace <dir> [-workspace-id <id>] <operationID>
 
 Every command other than version opens a workspace through the trusted
@@ -91,6 +92,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runStartRun(args[1:], stdout, stderr)
 	case "run":
 		return runRunQuery(args[1:], stdout, stderr)
+	case "run-output":
+		return runRunOutputQuery(args[1:], stdout, stderr)
 	case "operation":
 		return runOperationQuery(args[1:], stdout, stderr)
 	case "__fixture-participate":

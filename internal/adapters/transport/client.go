@@ -246,6 +246,16 @@ func (c *Client) GetRun(ctx context.Context, id domain.RunID) (domain.Run, error
 	return out, err
 }
 
+func (c *Client) ReadOutput(ctx context.Context, id domain.RunID, afterOffset uint64, byteLimit int) (domain.RunOutput, error) {
+	var out domain.RunOutput
+	err := c.call(ctx, "ReadOutput", struct {
+		RunID       domain.RunID `json:"runID"`
+		AfterOffset uint64       `json:"afterOffset"`
+		ByteLimit   int          `json:"byteLimit"`
+	}{id, afterOffset, byteLimit}, &out)
+	return out, err
+}
+
 func (c *Client) GetOperation(ctx context.Context, id domain.OperationID) (domain.Operation, error) {
 	var out domain.Operation
 	err := c.call(ctx, "GetOperation", struct {

@@ -143,6 +143,22 @@ func dispatch(ctx context.Context, session api.FrontendSession, envelope Envelop
 			return nil, err
 		}
 		return session.GetRun(ctx, req.RunID)
+	case "ReadOutput":
+		var req struct {
+			RunID       domain.RunID `json:"runID"`
+			AfterOffset uint64       `json:"afterOffset"`
+			ByteLimit   int          `json:"byteLimit"`
+		}
+		if err := decode(&req); err != nil {
+			return nil, err
+		}
+		reader, ok := session.(interface {
+			ReadOutput(context.Context, domain.RunID, uint64, int) (domain.RunOutput, error)
+		})
+		if !ok {
+			return nil, &domain.Error{Code: domain.ErrUnsupported, Detail: "output read is unsupported on this session"}
+		}
+		return reader.ReadOutput(ctx, req.RunID, req.AfterOffset, req.ByteLimit)
 	case "GetOperation":
 		var req struct {
 			OperationID domain.OperationID `json:"operationID"`

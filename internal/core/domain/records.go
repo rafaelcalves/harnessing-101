@@ -9,7 +9,31 @@ type (
 	MessageKind    string
 	RunState       string
 	OperationState string
+	CaptureStatus  string
 )
+
+const (
+	CaptureInterrupted CaptureStatus = "interrupted"
+	CaptureUnknown     CaptureStatus = "unknown"
+	CaptureComplete    CaptureStatus = "complete"
+)
+
+// OutputChunk is a durably appended stdout/stderr segment. Offset advances
+// only after the journal persists the segment; absent tail bytes are never
+// represented by a synthetic count or range.
+type OutputChunk struct {
+	Offset     uint64
+	Channel    string
+	Bytes      []byte
+	CapturedAt time.Time
+}
+
+// RunOutput is the product read model for the minimal output-journal slice.
+type RunOutput struct {
+	RunID         RunID
+	Chunks        []OutputChunk
+	CaptureStatus CaptureStatus
+}
 
 const (
 	TaskTodo           TaskStatus = "Todo"

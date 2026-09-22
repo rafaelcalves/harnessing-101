@@ -71,10 +71,23 @@ func runFixtureParticipate(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	_, _ = fmt.Fprintln(stdout, "harnessing fixture: participated")
+	outputMode := os.Getenv("HARNESSING_FIXTURE_OUTPUT_MODE")
+	if outputMode == "prefix_then_block" {
+		_, _ = fmt.Fprintln(stdout, "fixture-out-1")
+	}
 	if syncPath := os.Getenv("HARNESSING_FIXTURE_SYNC_FILE"); syncPath != "" {
-		if err := os.WriteFile(syncPath, []byte(fmt.Sprintf("participated\npid=%d\n", os.Getpid())), 0o600); err != nil {
+		marker := fmt.Sprintf("participated\npid=%d\n", os.Getpid())
+		if outputMode == "prefix_then_block" {
+			marker += "prefix-ready\n"
+		}
+		if err := os.WriteFile(syncPath, []byte(marker), 0o600); err != nil {
 			_, _ = fmt.Fprintln(stderr, "harnessing fixture: writing sync file: "+err.Error())
 			return 1
+		}
+	}
+	if outputMode == "prefix_then_block" {
+		for {
+			time.Sleep(time.Hour)
 		}
 	}
 

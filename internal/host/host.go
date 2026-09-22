@@ -37,6 +37,7 @@ import (
 
 	"github.com/rafaelcalves/harnessing-101/internal/adapters/clock"
 	"github.com/rafaelcalves/harnessing-101/internal/adapters/idsource"
+	"github.com/rafaelcalves/harnessing-101/internal/adapters/journal"
 	"github.com/rafaelcalves/harnessing-101/internal/adapters/process"
 	"github.com/rafaelcalves/harnessing-101/internal/adapters/statestore"
 	"github.com/rafaelcalves/harnessing-101/internal/api"
@@ -76,6 +77,7 @@ type Capabilities interface {
 	GetMessage(ctx context.Context, messageID domain.MessageID) (domain.Message, error)
 	GetAgent(ctx context.Context, agentID domain.AgentID) (domain.Agent, error)
 	GetRun(ctx context.Context, runID domain.RunID) (domain.Run, error)
+	ReadOutput(ctx context.Context, runID domain.RunID, afterOffset uint64, byteLimit int) (domain.RunOutput, error)
 	GetOperation(ctx context.Context, operationID domain.OperationID) (domain.Operation, error)
 	GetSnapshot(ctx context.Context) (domain.Snapshot, error)
 
@@ -110,6 +112,7 @@ type Capabilities interface {
 type workspace struct {
 	store       *statestore.FileStore
 	engine      *task.Engine
+	journal     *journal.Journal
 	workspaceID domain.WorkspaceID
 	reviewers   map[domain.AgentID]bool
 }
@@ -125,8 +128,13 @@ func Open(root string, workspaceID domain.WorkspaceID, reviewerAgentIDs []domain
 	if err != nil {
 		return nil, err
 	}
+	j, err := journal.Open(filepath.Join(root, "output"))
+	if err != nil {
+		_ = store.Close()
+		return nil, err
+	}
 	engine := task.NewEngine(store, clock.NewSystem(), idsource.Random{}, workspaceID)
-	engine.SetProcessSupervisor(&process.Supervisor{ContextDir: filepath.Join(root, "runs")})
+	engine.SetProcessSupervisor(&process.Supervisor{ContextDir: filepath.Join(root, "runs"), Journal: j})
 
 	// H101-170 (item 4 minimal slice): reconcile any run left Starting
 	// by a controller that crashed before this host existed — exactly
@@ -137,12 +145,18 @@ func Open(root string, workspaceID domain.WorkspaceID, reviewerAgentIDs []domain
 		_ = store.Close()
 		return nil, err
 	}
+	snapshot, _ := engine.GetSnapshot(context.Background())
+	for _, run := range snapshot.Runs {
+		if run.State == domain.RunRecoveryRequired {
+			_ = j.Finish(context.Background(), run.ID, domain.CaptureInterrupted)
+		}
+	}
 
 	reviewers := make(map[domain.AgentID]bool, len(reviewerAgentIDs))
 	for _, id := range reviewerAgentIDs {
 		reviewers[id] = true
 	}
-	return &workspace{store: store, engine: engine, workspaceID: workspaceID, reviewers: reviewers}, nil
+	return &workspace{store: store, engine: engine, journal: j, workspaceID: workspaceID, reviewers: reviewers}, nil
 }
 
 // caller builds the CallerScope the engine sees. IsHumanReviewer comes
@@ -230,6 +244,18 @@ func (w *workspace) GetAgent(ctx context.Context, agentID domain.AgentID) (domai
 
 func (w *workspace) GetRun(ctx context.Context, runID domain.RunID) (domain.Run, error) {
 	return w.engine.GetRun(ctx, runID)
+}
+
+func (w *workspace) ReadOutput(ctx context.Context, runID domain.RunID, afterOffset uint64, byteLimit int) (domain.RunOutput, error) {
+	value, err := w.journal.ReadAfter(ctx, runID, afterOffset, byteLimit)
+	if err != nil {
+		return domain.RunOutput{}, err
+	}
+	out, ok := value.(domain.RunOutput)
+	if !ok {
+		return domain.RunOutput{}, &domain.Error{Code: domain.ErrIOFailure, Detail: "journal returned invalid output"}
+	}
+	return out, nil
 }
 
 func (w *workspace) GetOperation(ctx context.Context, operationID domain.OperationID) (domain.Operation, error) {
@@ -324,6 +350,9 @@ func (s *frontendSession) GetMessage(ctx context.Context, id domain.MessageID) (
 }
 func (s *frontendSession) GetRun(ctx context.Context, id domain.RunID) (domain.Run, error) {
 	return s.caps.GetRun(ctx, id)
+}
+func (s *frontendSession) ReadOutput(ctx context.Context, id domain.RunID, afterOffset uint64, byteLimit int) (domain.RunOutput, error) {
+	return s.caps.ReadOutput(ctx, id, afterOffset, byteLimit)
 }
 func (s *frontendSession) GetOperation(ctx context.Context, id domain.OperationID) (domain.Operation, error) {
 	return s.caps.GetOperation(ctx, id)
