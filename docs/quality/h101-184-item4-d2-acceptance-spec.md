@@ -46,9 +46,11 @@ After the condition producer (below), a **fresh** `harnessing run` subprocess:
 | B2 | stdout contains **`Run <runID>`** for the affected run |
 | B3 | stdout contains **`State:      RecoveryRequired`** |
 | B4 | stdout does **not** contain **`State:      Running`** |
-| B5 | (Precondition, same test) an earlier `harnessing run` in the **same** controller
-session or a poll before kill showed **`State:      Running`** — proves we are testing
-stuck-Running, not stuck-Starting |
+| B5′ | (Precondition, same test) `HARNESSING_FIXTURE_SYNC_FILE` contains
+**`participated\npid=<N>`** before controller SIGKILL; child killed via that
+`pid=` before reopen — proves stuck-**Running** window, not E2
+`start-called` / stuck-**Starting** (see H101-186: written B5 was
+unsatisfiable with today's lock lifecycle) |
 
 **Not sufficient:**
 
@@ -65,15 +67,14 @@ stuck-Running, not stuck-Starting |
 
 1. Same setup as `TestCLI_StartRun_LayerAParticipationFixture`: real `harnessing`
    binary, register, approve profile with `__fixture-participate` +
-   `context-file`, **`harnessing start-run`** in a subprocess.
-2. Wait until a **prior** `harnessing run` poll shows **`State:      Running`**
-   (subprocess in test loop — still product surface, not engine).
-3. **SIGKILL** the fixture child using **`pid=` from the existing sync-file pattern**
-   (`HARNESSING_FIXTURE_SYNC_FILE`) — extend fixture to write `pid=` on normal
-   participate path, or read from participation marker metadata if already present.
-   Do **not** invent a third crash harness if the sync file already carries PID.
-4. **SIGKILL** the `start-run` controller subprocess (unclean, no `Close`) — mirrors
-   E2 controller kill; leaves durable `Running` in store with dead child.
+   `context-file`, **`harnessing start-run`** in a subprocess with
+   `HARNESSING_FIXTURE_SYNC_FILE` set.
+2. Wait until sync file contains **`participated\npid=<N>`** (extend normal
+   participate path to write this — **not** `block_after_marker` /
+   `start-called`). Proves Running-commit window per H101-186 B5′.
+3. **SIGKILL** the fixture child using **`pid=`** from the sync file.
+4. **SIGKILL** the `start-run` controller subprocess (unclean, no `Close`) —
+   while still alive after step 2; leaves durable `Running` with dead child.
 5. Fresh `harnessing run` → assert B1–B4.
 
 **Product work expected (one card):** extend `ReconcileStuckRuns` (or equivalent
@@ -81,8 +82,10 @@ single `host.Open` reconcile pass) to **`RunRunning`** when `Recover` returns
 `ErrRecoveryRequired` — h101-128 line 69 already requires reconciling **nonterminal**
 runs; H101-170 only implemented the `Starting` slice.
 
-**Two cards** only if Stanley disputes Running reconcile scope — Kelly reads
-architecture as already decided; stop and report if implementer finds a conflict.
+**One card** (H101-185): Running reconcile + CLI test above. H101-187
+(`4be5966`) affirms conservative reopen reconcile; B5′ per H101-186. Reconcile
+must run only on **fresh `host.Open` after controller death** — never on a
+continuing host's own supervised runs (h101-187 §1).
 
 ---
 
@@ -91,13 +94,14 @@ architecture as already decided; stop and report if implementer finds a conflict
 | # | Observation | Defect class | Fix |
 | --- | --- | --- |
 | S1 | Test uses `engine.GetRun`, `host.Open`, or store file read for verdict | **Test** | D6 class |
-| S2 | Test never proved `Running` before kill | **Test** | Not D2 — wrong precondition |
+| S2 | Test never proved Running-commit window before kill (B5′ missing) | **Test** | Not D2 — wrong precondition / E2 again |
 | S3 | Child killed before `Running` committed | **Test** | E2 window, not D2 |
 | S4 | `harnessing run` still `State:      Running` after dead child + reopen | **Product** | **D2** |
 | S5 | `harnessing run` shows `Exited` without established terminal outcome | **Product** | h101-128 honesty |
 | S6 | Crash after graceful `Close` only | **Test** | D5 class |
 | S7 | Pass on one in-scope CI target via `t.Skip` | **Test** | R8 / ADR 0001 |
 | S8 | D2 claimed while test red/skipped | **Evidence** | R9 class |
+| S9 | Reconcile exercised on continuing host's own run, not post-crash fresh open | **Test** | h101-187 §1 collision |
 
 ---
 

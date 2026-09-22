@@ -393,11 +393,19 @@ H101-182 A1–A5, R3–R7). **R8:** both ADR targets — CI SUCCESS on `21c782e`
 
 ### H101-184 — Item 4 D2 acceptance spec (2026-09-22)
 
-D2 engineering blocked until this spec lands. **Running + dead child →
-`RecoveryRequired` on next `harnessing run`**, not stuck `Running` (h101-128 lines
-69–71). Reuse participation fixture + PID sync + controller SIGKILL; **not**
-`block_after_marker` (E2 window). Full spec:
+**Running + dead child → `RecoveryRequired` on next `harnessing run`**, not stuck
+`Running` (h101-128 lines 69–71). Reuse participation fixture + PID sync +
+controller SIGKILL; **not** `block_after_marker` (E2 window). Full spec:
 [`h101-184-item4-d2-acceptance-spec.md`](h101-184-item4-d2-acceptance-spec.md).
+
+### H101-186 — D2 B5 precondition ruling (2026-09-22)
+
+Claudio stop on H101-185 **correct**: written B5 unsatisfiable with today's lock
+lifecycle. **B5′** substitute: `participated\npid=` sync before controller
+SIGKILL. H101-187 (`4be5966`) affirms conservative Running → `RecoveryRequired`
+on reopen; **H101-185 unblocked** (one card). Ruling:
+[`h101-186-item4-d2-b5-ruling.md`](h101-186-item4-d2-b5-ruling.md). Architecture:
+[`h101-187-running-recovery-ownership.md`](../architecture/h101-187-running-recovery-ownership.md).
 
 ---
 
