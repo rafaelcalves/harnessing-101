@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -9,6 +10,30 @@ import (
 	"strings"
 	"testing"
 )
+
+// runCLIWithEnv is buildAndRunCLI's env-injecting counterpart: the
+// R3/D10 negative-path tests below need to set
+// HARNESSING_FIXTURE_SIMULATE on the spawned `harnessing start-run`
+// process so it reaches the grandchild fixture process, which
+// internal/adapters/process.Supervisor's cmd.Env = os.Environ() picks
+// up transitively.
+func runCLIWithEnv(t *testing.T, binary string, env []string, args ...string) spawnedCLIResult {
+	t.Helper()
+	cmd := exec.Command(binary, args...)
+	cmd.Env = append(os.Environ(), env...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	code := 0
+	if err != nil {
+		code = 1
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			code = exitErr.ExitCode()
+		}
+	}
+	return spawnedCLIResult{stdout: stdout.String(), stderr: stderr.String(), code: code}
+}
 
 // TestCLI_StartRun_LayerAParticipationFixture is Phase 3 item 1's Layer
 // A CI proof (H101-147): a real subprocess, launched through the
@@ -158,5 +183,87 @@ func TestCLI_StartRun_MissingToolIsHonestNotRunning(t *testing.T) {
 	runResult := run("run", "-workspace", dir, "-workspace-id", wsID, "run-1")
 	if runResult.code != 0 || !strings.Contains(runResult.stdout, "State:      Exited") {
 		t.Fatalf("harnessing run output = %q (exit %d), want State: Exited — never left dangling as Starting", runResult.stdout, runResult.code)
+	}
+}
+
+// TestCLI_StartRun_AuthRequiredFixtureEndsExitedNotRunning is Kelly's
+// R3/D10 CI negative: a fast-failing, auth-required-style exit from
+// the launched tool must end the run Exited, with a stable error code
+// on start-run itself — never Running, never silent success. This
+// wires HARNESSING_FIXTURE_SIMULATE (added when the fixture was built,
+// unused by any test until now) through a real subprocess.
+func TestCLI_StartRun_AuthRequiredFixtureEndsExitedNotRunning(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("workspace operation is Unsupported on this platform")
+	}
+	binary := filepath.Join(t.TempDir(), "harnessing")
+	build := exec.Command("go", "build", "-o", binary, ".")
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build harnessing binary: %v\n%s", output, err)
+	}
+	dir := t.TempDir()
+	const wsID = "ws-start-run-auth-required"
+
+	run := func(args ...string) spawnedCLIResult { return buildAndRunCLI(t, binary, args...) }
+	if r := run("register", "-workspace", dir, "-workspace-id", wsID, "-caller", "agent-a", "-request-id", "reg-1", "-agent", "agent-a", "-display-name", "Agent A"); r.code != 0 {
+		t.Fatalf("register: exit=%d stderr=%s", r.code, r.stderr)
+	}
+	if r := run("approve-profile", "-workspace", dir, "-workspace-id", wsID, "-reviewer", "human1", "-caller", "human1", "-request-id", "approve-1",
+		"-profile-id", "auth-profile", "-tool-executable", binary, "-tool-argv-json", `["__fixture-participate"]`); r.code != 0 {
+		t.Fatalf("approve-profile: exit=%d stderr=%s", r.code, r.stderr)
+	}
+
+	result := runCLIWithEnv(t, binary, []string{"HARNESSING_FIXTURE_SIMULATE=auth_required"},
+		"start-run", "-workspace", dir, "-workspace-id", wsID, "-run", "run-1", "-agent", "agent-a", "-profile-id", "auth-profile")
+	if result.code == 0 {
+		t.Fatalf("start-run against an auth-required fixture succeeded; want a rejection")
+	}
+	if !strings.Contains(result.stderr, "SpawnFailed") {
+		t.Fatalf("start-run stderr = %q, want a stable classified error", result.stderr)
+	}
+
+	runResult := run("run", "-workspace", dir, "-workspace-id", wsID, "run-1")
+	if runResult.code != 0 || !strings.Contains(runResult.stdout, "State:      Exited") {
+		t.Fatalf("harnessing run output = %q (exit %d), want State: Exited, not Running", runResult.stdout, runResult.code)
+	}
+}
+
+// TestCLI_StartRun_UnsupportedContextTransportEndsExitedNotRunning is
+// Kelly's other named R3/D10 CI negative: a profile approved with an
+// unsupported ContextTransport value must fail loud (Unsupported) at
+// Start, never silently skip participation context and report Running.
+func TestCLI_StartRun_UnsupportedContextTransportEndsExitedNotRunning(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("workspace operation is Unsupported on this platform")
+	}
+	binary := filepath.Join(t.TempDir(), "harnessing")
+	build := exec.Command("go", "build", "-o", binary, ".")
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build harnessing binary: %v\n%s", output, err)
+	}
+	dir := t.TempDir()
+	const wsID = "ws-start-run-unsupported-transport"
+
+	run := func(args ...string) spawnedCLIResult { return buildAndRunCLI(t, binary, args...) }
+	if r := run("register", "-workspace", dir, "-workspace-id", wsID, "-caller", "agent-a", "-request-id", "reg-1", "-agent", "agent-a", "-display-name", "Agent A"); r.code != 0 {
+		t.Fatalf("register: exit=%d stderr=%s", r.code, r.stderr)
+	}
+	if r := run("approve-profile", "-workspace", dir, "-workspace-id", wsID, "-reviewer", "human1", "-caller", "human1", "-request-id", "approve-1",
+		"-profile-id", "stdin-profile", "-tool-executable", binary, "-tool-argv-json", `["__fixture-participate"]`,
+		"-context-transport", "stdin"); r.code != 0 {
+		t.Fatalf("approve-profile: exit=%d stderr=%s", r.code, r.stderr)
+	}
+
+	result := run("start-run", "-workspace", dir, "-workspace-id", wsID, "-run", "run-1", "-agent", "agent-a", "-profile-id", "stdin-profile")
+	if result.code == 0 {
+		t.Fatalf("start-run against an unsupported context transport succeeded; want a rejection")
+	}
+	if !strings.Contains(result.stderr, "Unsupported") {
+		t.Fatalf("start-run stderr = %q, want an Unsupported error", result.stderr)
+	}
+
+	runResult := run("run", "-workspace", dir, "-workspace-id", wsID, "run-1")
+	if runResult.code != 0 || !strings.Contains(runResult.stdout, "State:      Exited") {
+		t.Fatalf("harnessing run output = %q (exit %d), want State: Exited, not Running", runResult.stdout, runResult.code)
 	}
 }

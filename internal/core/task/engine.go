@@ -770,6 +770,13 @@ func (e *Engine) StartRun(ctx context.Context, caller CallerScope, req StartRunR
 	if e.supervisor == nil {
 		return domain.Receipt{}, &domain.Error{Code: domain.ErrUnsupported, Detail: "no process supervisor is configured for this host"}
 	}
+	// h101-128 line 35, initial policy: a principal may start its own
+	// registered agent only. The admin-override half of that sentence
+	// needs a new CallerScope capability (H101-158, not this card) —
+	// ship the restrictive half now, never the reverse.
+	if caller.AgentID != req.AgentID {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrDenied, Detail: "a caller may only start a run for its own registered agent"}
+	}
 	if req.ToolExecutable != "" && len(req.ToolArgv) == 0 {
 		// Nothing actually requires this pairing structurally, but an
 		// executable with no argv at all is never what a real agentic
@@ -785,6 +792,14 @@ func (e *Engine) StartRun(ctx context.Context, caller CallerScope, req StartRunR
 	receipt, err := e.commit(ctx, caller, req.RequestID, fpA, func(snap *domain.Snapshot) ([]domain.Event, error) {
 		if _, _, found := findRun(snap, domain.RunID(req.RunID)); found {
 			return nil, &domain.Error{Code: domain.ErrConflict, Detail: "runID already exists"}
+		}
+		// h101-128 line 43: reject a second active run for the same
+		// agent initially. A snapshot scan, not a new persisted index —
+		// neither item 2 (StopRun needs someone to have noticed) nor
+		// item 3 (per-run ceilings bound one run's own usage, not the
+		// count of simultaneous runs) closes this on their own.
+		if active, found := findActiveRunForAgent(snap, req.AgentID); found {
+			return nil, &domain.Error{Code: domain.ErrConflict, Detail: "agent " + string(req.AgentID) + " already has an active run: " + string(active)}
 		}
 		profile, found := findProfile(snap, req.ProfileID)
 		if !found {
@@ -960,6 +975,21 @@ func findRun(snap *domain.Snapshot, id domain.RunID) (int, domain.Run, bool) {
 		}
 	}
 	return 0, domain.Run{}, false
+}
+
+// findActiveRunForAgent implements h101-128 line 43's per-agent
+// ceiling: Starting or Running counts as active; Exited and
+// RecoveryRequired do not block a new start.
+func findActiveRunForAgent(snap *domain.Snapshot, agentID domain.AgentID) (domain.RunID, bool) {
+	for _, r := range snap.Runs {
+		if r.AgentID != agentID {
+			continue
+		}
+		if r.State == domain.RunStarting || r.State == domain.RunRunning {
+			return r.ID, true
+		}
+	}
+	return "", false
 }
 
 // MessageDeliveryRequest identifies a delivery fact recorded by the host.

@@ -131,29 +131,98 @@ func TestStartRun_ApprovedReachesRunning(t *testing.T) {
 }
 
 // TestStartRun_CallerScopeNotRequestFields is CF1 (D3): authorization
-// comes from the CallerScope the host established, never from a field
-// on the request payload. StartRunRequest carries no sender-claim field
-// at all — proving this means proving the request's OWN AgentID/
-// ProfileID are select-what-to-check values, not authority, by showing
-// two different callers get the identical outcome for the identical
-// request.
+// comes from the CallerScope the host established, never a claim a
+// caller could write into the request. h101-128 line 35's self-scope
+// rule (a principal may start its own registered agent only) is
+// ENFORCED FROM CallerScope.AgentID, not from copying req.AgentID
+// verbatim: a validly REGISTERED "someone-else" still cannot start
+// agent-a's run just by naming agent-a in the request, and the
+// legitimate caller succeeds using the identical request shape. If
+// authorization ever collapsed onto trusting req.AgentID alone (the
+// CF1 violation this guards against), the first case here would
+// wrongly succeed.
 func TestStartRun_CallerScopeNotRequestFields(t *testing.T) {
 	sup := &fakeSupervisor{}
 	e := newStartRunEngine(t, sup)
 	ctx := context.Background()
 	mustRegisterAndApprove(t, ctx, e, "agent-a", "profile-a")
-
-	for i, callerID := range []domain.AgentID{"someone-else", "another-caller"} {
-		runID := "run-" + string(rune('a'+i))
-		_, err := e.StartRun(ctx, CallerScope{AgentID: callerID}, StartRunRequest{
-			RequestID: domain.RequestID("r-" + string(rune('a'+i))), RunID: runID, AgentID: "agent-a", ProfileID: "profile-a",
-		})
-		if err != nil {
-			t.Fatalf("StartRun as caller %s: %v", callerID, err)
-		}
+	if _, err := e.RegisterAgent(ctx, CallerScope{AgentID: "someone-else"}, RegisterAgentRequest{
+		RequestID: "reg-other", AgentID: "someone-else", DisplayName: "someone-else",
+	}); err != nil {
+		t.Fatalf("RegisterAgent someone-else: %v", err)
 	}
-	if sup.calls != 2 {
-		t.Fatalf("supervisor.Start called %d times; want 2 (caller identity never gated this)", sup.calls)
+
+	_, err := e.StartRun(ctx, CallerScope{AgentID: "someone-else"}, StartRunRequest{
+		RequestID: "r-mismatch", RunID: "run-mismatch", AgentID: "agent-a", ProfileID: "profile-a",
+	})
+	startRunMustErrorCode(t, err, domain.ErrDenied)
+	if sup.calls != 0 {
+		t.Fatalf("supervisor.Start called %d times for a mismatched caller; want 0", sup.calls)
+	}
+
+	_, err = e.StartRun(ctx, CallerScope{AgentID: "agent-a"}, StartRunRequest{
+		RequestID: "r-self", RunID: "run-self", AgentID: "agent-a", ProfileID: "profile-a",
+	})
+	if err != nil {
+		t.Fatalf("StartRun as the run's own agent: %v", err)
+	}
+	if sup.calls != 1 {
+		t.Fatalf("supervisor.Start called %d times; want exactly 1 (only the self-scoped caller)", sup.calls)
+	}
+}
+
+// TestStartRun_SecondActiveRunForSameAgentIsConflict is h101-128 line
+// 43: an agent with an already-Starting-or-Running run is rejected
+// before the second run ever reaches the supervisor — a snapshot
+// scan, no new persisted index.
+func TestStartRun_SecondActiveRunForSameAgentIsConflict(t *testing.T) {
+	sup := &fakeSupervisor{}
+	e := newStartRunEngine(t, sup)
+	ctx := context.Background()
+	mustRegisterAndApprove(t, ctx, e, "agent-a", "profile-a")
+
+	if _, err := e.StartRun(ctx, CallerScope{AgentID: "agent-a"}, StartRunRequest{
+		RequestID: "r1", RunID: "run-1", AgentID: "agent-a", ProfileID: "profile-a",
+	}); err != nil {
+		t.Fatalf("first StartRun: %v", err)
+	}
+	if sup.calls != 1 {
+		t.Fatalf("supervisor.Start called %d times after the first run; want 1", sup.calls)
+	}
+
+	_, err := e.StartRun(ctx, CallerScope{AgentID: "agent-a"}, StartRunRequest{
+		RequestID: "r2", RunID: "run-2", AgentID: "agent-a", ProfileID: "profile-a",
+	})
+	startRunMustErrorCode(t, err, domain.ErrConflict)
+	if sup.calls != 1 {
+		t.Fatalf("supervisor.Start called %d times after the second attempt; want still 1 — the second active run must never reach the supervisor", sup.calls)
+	}
+}
+
+// TestStartRun_NewRunAllowedAfterPriorExit proves the per-agent ceiling
+// is "active," not "ever started": an Exited run does not permanently
+// lock its agent out of starting again.
+func TestStartRun_NewRunAllowedAfterPriorExit(t *testing.T) {
+	sup := &fakeSupervisor{startErr: &domain.Error{Code: domain.ErrMissingTool}}
+	e := newStartRunEngine(t, sup)
+	ctx := context.Background()
+	mustRegisterAndApprove(t, ctx, e, "agent-a", "profile-a")
+
+	if _, err := e.StartRun(ctx, CallerScope{AgentID: "agent-a"}, StartRunRequest{
+		RequestID: "r1", RunID: "run-1", AgentID: "agent-a", ProfileID: "profile-a",
+	}); err == nil {
+		t.Fatal("first StartRun unexpectedly succeeded")
+	}
+	run, err := e.GetRun(ctx, "run-1")
+	if err != nil || run.State != domain.RunExited {
+		t.Fatalf("run-1 state = %+v, err = %v; want Exited", run, err)
+	}
+
+	sup.startErr = nil
+	if _, err := e.StartRun(ctx, CallerScope{AgentID: "agent-a"}, StartRunRequest{
+		RequestID: "r2", RunID: "run-2", AgentID: "agent-a", ProfileID: "profile-a",
+	}); err != nil {
+		t.Fatalf("second StartRun after the first exited: %v", err)
 	}
 }
 
