@@ -216,9 +216,22 @@ H101-128 paragraph. That requires a new `CallerScope` process-admin capability
 **D5 note:** H101-128’s “receipt/operationID before any spawn” is forwarded to Stanley
 for the existing D5 row. No change to D5 in this amendment pending his ruling.
 
-**5cca4e0 impact:** engine checks runID collision only (line 786); cross-caller
-starts are exercised as passing in tests. Item 1 remains **NOT SATISFIED**; D18 and
-D19 join the missing list alongside Layer B Claude, R3/D10 CI negatives, and D5.
+**Standing at `20a6f8a` (Kelly re-verdict 2026-09-22):** Item 1 remains **NOT
+SATISFIED**. Layer A CI and product rows below are discharged on both ADR targets
+via `make build test vet lint fmt` green locally (darwin/arm64) and the same
+suite on ubuntu + macos-14 CI. **Sole remaining item 1 blocker:** Layer B for
+Claude Code — no runner-produced manifest on record; descriptor `deferred: false`.
+Codex and Cursor Agent have owner deferrals in committed descriptors (not
+blockers). Owner decision H101-163 (participation protocol vs Claude deferral) is
+the path to close that slot; Kelly does not rule it here.
+
+| Row | Verdict | Evidence (quote tails, not summaries) |
+| --- | --- | --- |
+| D5 | **SATISFIED** | `TestStartRun_ReceiptCarriesOperationIDWithQueryableProgress`, `TestStartRun_OperationIDIsStableAcrossReceiptReplay` (`20a6f8a`); `TestCLI_StartRun_ReceiptOperationIDIsQueryable` (`20a6f8a`) — all PASS |
+| D18 | **SATISFIED** | `TestStartRun_SecondActiveRunForSameAgentIsConflict`, `TestStartRun_NewRunAllowedAfterPriorExit` (`5048489`) — PASS; engine-only, no dedicated CLI subprocess row |
+| D19 | **SATISFIED** | `TestStartRun_CallerScopeNotRequestFields` rewritten for self-scope (`5048489`) — PASS; engine-only |
+| R3/D10 CI negatives | **SATISFIED** | `TestCLI_StartRun_MissingToolIsHonestNotRunning`, `TestCLI_StartRun_AuthRequiredFixtureEndsExitedNotRunning`, `TestCLI_StartRun_UnsupportedContextTransportEndsExitedNotRunning` (`5048489`); engine `TestStartRun_SupervisorFailureRecordsExitedHonestly` — PASS |
+| Layer B Claude | **NOT SATISFIED** | GETTING-STARTED §9: network policy blocked before runner wrote a report; no `cycle_completed` manifest. D14/D15 runner exists; evidence file absent |
 
 ### H101-153 Layer B refinements (2026-09-21)
 
