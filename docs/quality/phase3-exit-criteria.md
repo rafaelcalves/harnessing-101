@@ -458,12 +458,19 @@ evidence-scope limit only (see H101-193 D1 note: not a latent defect). Ruling:
 
 ### H101-193 — Item 5 acceptance spec (2026-09-22)
 
-Item 5 engineering blocked until amended spec commits. Beyond D4: graceful **complete**
-capture, stdout+stderr channels, offset resume, UI-08 separation, real-not-fake CLI
-proof. **Amended H101-199:** serve-owned producer with QA-defined
-`serve_release_both_channels` + `HARNESSING_FIXTURE_RELEASE_FILE` (Stanley H101-195
-`a61187f`). Withdrawn: one-shot `emit_both_channels_then_exit`. Full spec:
+Beyond D4: graceful **complete** capture, stdout+stderr channels, offset resume,
+UI-08 separation, real-not-fake CLI proof. **Amended H101-199:** serve-owned producer
+with QA-defined `serve_release_both_channels` + `HARNESSING_FIXTURE_RELEASE_FILE`
+(Stanley H101-195 `a61187f`). Full spec:
 [`h101-193-item5-acceptance-spec.md`](h101-193-item5-acceptance-spec.md).
+
+### H101-207 — Item 5 discharged (2026-09-22)
+
+**PHASE 3 ITEM 5: SATISFIED WITH LIMIT** at `e1a2e4b`. I1–I6 **SATISFIED** via
+`TestCLI_ServeOwnedGracefulCaptureCompletesBothChannels`; H101-195 fast-exit preserved.
+**LIMIT:** reader cancel without stopping run (D4/UI-08 follow) not proved — pre-
+authorised in H101-193. I6 satisfied by bounded `events` batch (not live stream).
+Ruling: [`h101-207-phase3-item5-discharge-ruling.md`](h101-207-phase3-item5-discharge-ruling.md).
 
 ---
 
