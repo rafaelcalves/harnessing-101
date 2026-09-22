@@ -91,6 +91,9 @@ table keeps them coupled.
 **Amended H101-147 (2026-09-21)** — managed start must launch a participating agent
 tool, not a generic process. See [amendment](#h101-147--item-1-managed-agent-tool-evidence-2026-09-21).
 
+**Amended H101-158 (2026-09-22)** — initial managed-run caller scope and one-active-run
+per agent, per Stanley H101-128. See [amendment](#h101-158--item-1-caller-scope-and-concurrency-2026-09-22).
+
 `StartRun` through the shipped `harnessing` command (subprocess, same surface as Phase 2
 item 1) must:
 
@@ -186,6 +189,36 @@ deferral before release claims that tool.
 | D15 | No committed documented runner for Layer B | **Evidence** | H101-153 — script required |
 | D16 | New agentic CLI would need hardcoded start-path branch | **Product** | H101-153 — descriptor extensibility |
 | D17 | Runner substitutes for Layer A participation fixture in CI | **Test** | Fixture only in CI |
+| D18 | Agent already has an active run (`Starting` or `Running`) and a second `StartRun` for that agent succeeds | **Product** | H101-128 — reject second active run for same agent (`Conflict`) |
+| D19 | `StartRun` for agent B succeeds when host-bound caller is agent A (cross-principal start without a host-granted managed-run capability for that profile) | **Product** | H101-128 — initial policy: principal starts **own** registered agent only |
+
+### H101-158 — Item 1 caller scope and concurrency (2026-09-22)
+
+**Authority:** god conflict ruling on Creed vs Kelly (2026-09-22), citing Stanley
+[`h101-128-phase3-supervision.md`](../architecture/h101-128-phase3-supervision.md)
+Approval and caller authority — items 1 and 8, and Start, stop and operation
+completion — items 1 and 2.
+
+**Ruling:** **Add rows only** — original item 1 text and prior amendments (H101-147,
+H101-153) are **retained**. This amendment **tightens** item 1; it does not waive any
+existing row.
+
+| H101-128 source | New row |
+| --- | --- |
+| Start table: “Reject a second active run for the same agent initially (`Conflict`)” | **D18** |
+| Approval section: “a principal may start its own registered agent only with a host-granted managed-run capability for that profile” | **D19** (self-scope half only) |
+
+**Explicitly out of item 1:** “human admin may manage registered agents” from the same
+H101-128 paragraph. That requires a new `CallerScope` process-admin capability
+(`IsHumanReviewer` is task-review authority only). Card separately; ship restrictive
+(self-scope) first, widen explicitly later (same pattern as ADR 0006 grants).
+
+**D5 note:** H101-128’s “receipt/operationID before any spawn” is forwarded to Stanley
+for the existing D5 row. No change to D5 in this amendment pending his ruling.
+
+**5cca4e0 impact:** engine checks runID collision only (line 786); cross-caller
+starts are exercised as passing in tests. Item 1 remains **NOT SATISFIED**; D18 and
+D19 join the missing list alongside Layer B Claude, R3/D10 CI negatives, and D5.
 
 ### H101-153 Layer B refinements (2026-09-21)
 
