@@ -50,7 +50,7 @@ competing host open. Wait boundedly for terminal capture before asserting I2.
 | # | Assertion |
 | --- | --- |
 | I1 | `harnessing run-output` (reader attached to **same owner**) exit code **0** |
-| I2 | `Capture status: complete` (exact `printRun`-class spacing on status line) |
+| I2 | `Capture status: complete` on a **fresh attached `run-output` query** within **≤5s** bounded poll (≤20ms interval) after fixture natural exit (exact status-line spacing) — **amended H101-223** |
 | I3 | stdout channel contains **exact** named literal `fixture-out-stdout\n` |
 | I4 | stderr channel contains **exact** named literal `fixture-out-stderr\n` |
 | I5 | Second `harnessing run-output` reader on the **same owner** with **`-after-offset`** past the first chunk returns **only** later bytes (offset-ordered resume per boundaries port 8) |

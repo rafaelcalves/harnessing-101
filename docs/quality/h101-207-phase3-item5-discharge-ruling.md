@@ -58,7 +58,7 @@ block I1–I6 discharge.
 | Row | Verdict | Evidence |
 | --- | --- | --- |
 | I1 | **SATISFIED** | `TestCLI_ServeOwnedGracefulCaptureCompletesBothChannels` — `run-output` exit 0 |
-| I2 | **SATISFIED** | `Capture status: complete` after bounded wait |
+| I2 | **SATISFIED** | `Capture status: complete` after bounded `run-output` poll (H101-223: query-triggered, not eager-ms) |
 | I3 | **SATISFIED** | Exact `fixture-out-stdout\n` on stdout channel |
 | I4 | **SATISFIED** | Exact `fixture-out-stderr\n` on stderr channel |
 | I5 | **SATISFIED** | Second attached `run-output -after-offset` returns only later chunk (not both literals) |

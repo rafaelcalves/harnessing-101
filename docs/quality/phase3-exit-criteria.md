@@ -485,7 +485,8 @@ with QA-defined `serve_release_both_channels` + `HARNESSING_FIXTURE_RELEASE_FILE
 
 ### H101-207 — Item 5 discharged (2026-09-22)
 
-**PHASE 3 ITEM 5: SATISFIED WITH LIMIT** at `e1a2e4b`. I1–I6 **SATISFIED** via
+**PHASE 3 ITEM 5: SATISFIED WITH LIMIT** at `e1a2e4b` (H101-223: lazy finalization on
+query compatible; I2 poll contract explicit). I1–I6 **SATISFIED** via
 `TestCLI_ServeOwnedGracefulCaptureCompletesBothChannels`; H101-195 fast-exit preserved.
 **LIMIT:** reader cancel without stopping run (D4/UI-08 follow) not proved — pre-
 authorised in H101-193. I6 satisfied by bounded `events` batch (not live stream).
