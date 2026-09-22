@@ -125,6 +125,23 @@ type workspace struct {
 // workspace content. A second Open against the same root fails Busy, per
 // FileStore's single-writer lock.
 func Open(root string, workspaceID domain.WorkspaceID, reviewerAgentIDs []domain.AgentID) (Capabilities, error) {
+	return open(root, workspaceID, reviewerAgentIDs, true)
+}
+
+// OpenWithoutSupervisor opens a capability-disabled workspace host
+// through the same trusted composition boundary as Open.
+// reviewerAgentIDs has the same fixed, host-supplied authority
+// semantics as Open. No process supervisor is installed. Locking,
+// persistence, startup reconciliation and reviewer binding are
+// unchanged; this is not a read-only open or attachment to an
+// existing owner. Only trusted assembly selects this mode at
+// construction. Shipped commands currently use Open; the adapter
+// contract fixture exercises this mode.
+func OpenWithoutSupervisor(root string, workspaceID domain.WorkspaceID, reviewerAgentIDs []domain.AgentID) (Capabilities, error) {
+	return open(root, workspaceID, reviewerAgentIDs, false)
+}
+
+func open(root string, workspaceID domain.WorkspaceID, reviewerAgentIDs []domain.AgentID, withSupervisor bool) (Capabilities, error) {
 	store, err := statestore.Open(root)
 	if err != nil {
 		return nil, err
@@ -135,7 +152,9 @@ func Open(root string, workspaceID domain.WorkspaceID, reviewerAgentIDs []domain
 		return nil, err
 	}
 	engine := task.NewEngine(store, clock.NewSystem(), idsource.Random{}, workspaceID)
-	engine.SetProcessSupervisor(&process.Supervisor{ContextDir: filepath.Join(root, "runs"), Journal: j})
+	if withSupervisor {
+		engine.SetProcessSupervisor(&process.Supervisor{ContextDir: filepath.Join(root, "runs"), Journal: j})
+	}
 
 	// H101-170 (item 4 minimal slice): reconcile any run left Starting
 	// by a controller that crashed before this host existed — exactly

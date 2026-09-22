@@ -23,11 +23,24 @@ import (
 const mailboxSubdir = "mailbox"
 
 func WithSession(stderr io.Writer, root string, workspaceID domain.WorkspaceID, reviewers []domain.AgentID, caller domain.AgentID, cmdName string, fn func(context.Context, api.FrontendSession) int) int {
+	return withSession(stderr, root, workspaceID, reviewers, caller, cmdName, host.Open, fn)
+}
+
+// WithSessionWithoutSupervisor uses OpenWithoutSupervisor with the
+// same caller/reviewer binding, mailbox processing and close lifecycle
+// as WithSession. Mode selection belongs to trusted assembly, never to
+// presentation payloads or session commands. Shipped commands
+// currently use WithSession.
+func WithSessionWithoutSupervisor(stderr io.Writer, root string, workspaceID domain.WorkspaceID, reviewers []domain.AgentID, caller domain.AgentID, cmdName string, fn func(context.Context, api.FrontendSession) int) int {
+	return withSession(stderr, root, workspaceID, reviewers, caller, cmdName, host.OpenWithoutSupervisor, fn)
+}
+
+func withSession(stderr io.Writer, root string, workspaceID domain.WorkspaceID, reviewers []domain.AgentID, caller domain.AgentID, cmdName string, open func(string, domain.WorkspaceID, []domain.AgentID) (host.Capabilities, error), fn func(context.Context, api.FrontendSession) int) int {
 	if root == "" {
 		_, _ = fmt.Fprintf(stderr, "harnessing %s: -workspace is required\n", cmdName)
 		return 1
 	}
-	caps, err := host.Open(root, workspaceID, reviewers)
+	caps, err := open(root, workspaceID, reviewers)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "harnessing %s: %s\n", cmdName, describeError(err))
 		return 1
