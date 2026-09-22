@@ -240,6 +240,7 @@ type Snapshot struct {
 	Messages    []Message
 	Profiles    []Profile
 	Runs        []Run
+	Operations  []Operation
 }
 
 // ExecutionSpec describes a local process an adapter may start. Resolving
@@ -262,6 +263,25 @@ type ExecutionSpec struct {
 	WorkingDirectory string
 	EnvironmentRefs  []string
 	ContextTransport string
+}
+
+// Operation is boundaries.md's command-completion record (line 40:
+// "StartRun/StopRun return operation IDs, with progress and terminal
+// outcomes obtained through Queries/StateEvents"): a durable record of
+// one accepted intent's own progress, separate from the Run it acts on.
+// Operation completion and run exit are different facts (Stanley,
+// H101-158's D5 ruling) — an operation reaching Succeeded means the
+// dispatch was carried out and observed, not that the run's whole
+// lifetime is over; Exited is the Run's own terminal state, tracked
+// independently.
+type Operation struct {
+	ID          OperationID
+	RunID       RunID
+	Kind        string
+	State       OperationState
+	CreatedAt   time.Time
+	CompletedAt *time.Time
+	Outcome     string
 }
 
 // RunParticipationContext is what StartRun hands the supervisor about

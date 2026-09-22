@@ -15,3 +15,6 @@
 
 # built binary from the Layer B owner-run command
 /harnessing
+
+# owner/reader workspace created by the getting-started guide
+/harnessing-demo/

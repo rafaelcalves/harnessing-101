@@ -143,6 +143,14 @@ func dispatch(ctx context.Context, session api.FrontendSession, envelope Envelop
 			return nil, err
 		}
 		return session.GetRun(ctx, req.RunID)
+	case "GetOperation":
+		var req struct {
+			OperationID domain.OperationID `json:"operationID"`
+		}
+		if err := decode(&req); err != nil {
+			return nil, err
+		}
+		return session.GetOperation(ctx, req.OperationID)
 	case "GetSnapshot":
 		return session.GetSnapshot(ctx)
 	case "ResolveRequest":

@@ -267,3 +267,50 @@ func TestCLI_StartRun_UnsupportedContextTransportEndsExitedNotRunning(t *testing
 		t.Fatalf("harnessing run output = %q (exit %d), want State: Exited, not Running", runResult.stdout, runResult.code)
 	}
 }
+
+// TestCLI_StartRun_ReceiptOperationIDIsQueryable is D5 through the
+// real CLI surface: start-run's own success line names an operation
+// ID, and `harnessing operation` resolves it to a Succeeded outcome —
+// boundaries.md line 40, observable end to end, not just on the Go
+// struct.
+func TestCLI_StartRun_ReceiptOperationIDIsQueryable(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("workspace operation is Unsupported on this platform")
+	}
+	binary := filepath.Join(t.TempDir(), "harnessing")
+	build := exec.Command("go", "build", "-o", binary, ".")
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build harnessing binary: %v\n%s", output, err)
+	}
+	dir := t.TempDir()
+	const wsID = "ws-start-run-operation"
+
+	run := func(args ...string) spawnedCLIResult { return buildAndRunCLI(t, binary, args...) }
+	if r := run("register", "-workspace", dir, "-workspace-id", wsID, "-caller", "agent-a", "-request-id", "reg-1", "-agent", "agent-a", "-display-name", "Agent A"); r.code != 0 {
+		t.Fatalf("register: exit=%d stderr=%s", r.code, r.stderr)
+	}
+	if r := run("approve-profile", "-workspace", dir, "-workspace-id", wsID, "-reviewer", "human1", "-caller", "human1", "-request-id", "approve-1",
+		"-profile-id", "op-profile", "-tool-executable", binary, "-tool-argv-json", `["__fixture-participate"]`,
+		"-context-transport", "context-file"); r.code != 0 {
+		t.Fatalf("approve-profile: exit=%d stderr=%s", r.code, r.stderr)
+	}
+
+	startResult := run("start-run", "-workspace", dir, "-workspace-id", wsID, "-run", "run-1", "-agent", "agent-a", "-profile-id", "op-profile")
+	if startResult.code != 0 {
+		t.Fatalf("start-run: exit=%d stderr=%s", startResult.code, startResult.stderr)
+	}
+	if !strings.Contains(startResult.stdout, "operation run-1-start") {
+		t.Fatalf("start-run stdout = %q, want it to name the operation ID", startResult.stdout)
+	}
+
+	opResult := run("operation", "-workspace", dir, "-workspace-id", wsID, "run-1-start")
+	if opResult.code != 0 {
+		t.Fatalf("operation query: exit=%d stderr=%s", opResult.code, opResult.stderr)
+	}
+	if !strings.Contains(opResult.stdout, "State:   Succeeded") {
+		t.Fatalf("harnessing operation output = %q, want State: Succeeded", opResult.stdout)
+	}
+	if !strings.Contains(opResult.stdout, "RunID:   run-1") {
+		t.Fatalf("harnessing operation output = %q, want RunID: run-1", opResult.stdout)
+	}
+}

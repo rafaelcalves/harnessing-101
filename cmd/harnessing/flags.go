@@ -105,7 +105,16 @@ func describeError(err error) string {
 
 // printReceipt is the one success-rendering used by every write command:
 // factual, no celebration, per definition.md's tone section.
+// OperationID (boundaries.md line 40, StartRun/StopRun) is included
+// whenever set, so a caller sees, from the CLI itself, the identifier
+// `harnessing operation` needs — receipt.OperationID being populated
+// on the Go struct with no rendering to show it would not be an
+// observably queryable outcome.
 func printReceipt(stdout io.Writer, cmdName string, receipt domain.Receipt) {
+	if receipt.OperationID != nil {
+		_, _ = fmt.Fprintf(stdout, "harnessing %s: OK (request %s, workspace revision %d, operation %s)\n", cmdName, receipt.RequestID, receipt.CommittedRevision, *receipt.OperationID)
+		return
+	}
 	_, _ = fmt.Fprintf(stdout, "harnessing %s: OK (request %s, workspace revision %d)\n", cmdName, receipt.RequestID, receipt.CommittedRevision)
 }
 

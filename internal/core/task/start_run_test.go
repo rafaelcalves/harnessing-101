@@ -383,3 +383,81 @@ func TestStartRun_DispatchAttemptedEventReachesTheJournal(t *testing.T) {
 		}
 	}
 }
+
+// TestStartRun_ReceiptCarriesOperationIDWithQueryableProgress is D5
+// (Stanley's ruling, H101-158): the receipt must carry an OperationID,
+// and that operation's progress/outcome must be independently
+// queryable through GetOperation — boundaries.md line 40 — separate
+// from the Run's own state. Operation completion (Succeeded) does not
+// mean the run's whole lifetime is over; Run state is tracked
+// independently and asserted separately here.
+func TestStartRun_ReceiptCarriesOperationIDWithQueryableProgress(t *testing.T) {
+	sup := &fakeSupervisor{}
+	e := newStartRunEngine(t, sup)
+	ctx := context.Background()
+	mustRegisterAndApprove(t, ctx, e, "agent-a", "profile-a")
+
+	receipt, err := e.StartRun(ctx, CallerScope{AgentID: "agent-a"}, StartRunRequest{
+		RequestID: "r1", RunID: "run-1", AgentID: "agent-a", ProfileID: "profile-a",
+	})
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+	if receipt.OperationID == nil {
+		t.Fatal("receipt.OperationID is nil; D5 requires an operation ID on this receipt")
+	}
+
+	op, err := e.GetOperation(ctx, *receipt.OperationID)
+	if err != nil {
+		t.Fatalf("GetOperation: %v", err)
+	}
+	if op.RunID != "run-1" {
+		t.Fatalf("op.RunID = %q, want run-1", op.RunID)
+	}
+	if op.State != domain.OperationSucceeded {
+		t.Fatalf("op.State = %q, want Succeeded", op.State)
+	}
+	if op.CompletedAt == nil {
+		t.Fatal("op.CompletedAt is nil for a Succeeded operation")
+	}
+
+	run, err := e.GetRun(ctx, "run-1")
+	if err != nil {
+		t.Fatalf("GetRun: %v", err)
+	}
+	if run.State != domain.RunRunning {
+		t.Fatalf("run.State = %q, want Running — operation completion and run state are separate facts", run.State)
+	}
+}
+
+// TestStartRun_OperationIDIsStableAcrossReceiptReplay proves the same
+// (callerAgentID, requestID) retried returns the SAME OperationID, not
+// a freshly generated one — Creed's "receipt/operationID before any
+// spawn" and D5 both require stable identity on replay.
+func TestStartRun_OperationIDIsStableAcrossReceiptReplay(t *testing.T) {
+	sup := &fakeSupervisor{}
+	e := newStartRunEngine(t, sup)
+	ctx := context.Background()
+	mustRegisterAndApprove(t, ctx, e, "agent-a", "profile-a")
+
+	req := StartRunRequest{RequestID: "r1", RunID: "run-1", AgentID: "agent-a", ProfileID: "profile-a"}
+	first, err := e.StartRun(ctx, CallerScope{AgentID: "agent-a"}, req)
+	if err != nil {
+		t.Fatalf("first StartRun: %v", err)
+	}
+
+	// A genuine replay: same caller, same request ID, same payload.
+	// The dispatch-attempted marker check would reject a SECOND live
+	// attempt, but this is the identical accepted request replaying —
+	// exercise it directly through the underlying store contract by
+	// calling StartRun again with everything unchanged and confirming
+	// whatever it returns still names the same operation.
+	second, err := e.StartRun(ctx, CallerScope{AgentID: "agent-a"}, req)
+	if first.OperationID == nil || second.OperationID == nil {
+		t.Fatalf("OperationID nil on one of the two calls: first=%v second=%v", first.OperationID, second.OperationID)
+	}
+	if *first.OperationID != *second.OperationID {
+		t.Fatalf("OperationID changed across replay: first=%s second=%s", *first.OperationID, *second.OperationID)
+	}
+	_ = err // the replay's own error (if any, e.g. ambiguous-marker Conflict) is not this test's concern — only ID stability is.
+}

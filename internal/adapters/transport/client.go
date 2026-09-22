@@ -246,6 +246,14 @@ func (c *Client) GetRun(ctx context.Context, id domain.RunID) (domain.Run, error
 	return out, err
 }
 
+func (c *Client) GetOperation(ctx context.Context, id domain.OperationID) (domain.Operation, error) {
+	var out domain.Operation
+	err := c.call(ctx, "GetOperation", struct {
+		OperationID domain.OperationID `json:"operationID"`
+	}{id}, &out)
+	return out, err
+}
+
 func (c *Client) GetSnapshot(ctx context.Context) (domain.Snapshot, error) {
 	var out domain.Snapshot
 	err := c.call(ctx, "GetSnapshot", struct{}{}, &out)

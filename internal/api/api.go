@@ -151,6 +151,7 @@ type FrontendSession interface {
 	GetTask(context.Context, domain.TaskID) (domain.Task, error)
 	GetMessage(context.Context, domain.MessageID) (domain.Message, error)
 	GetRun(context.Context, domain.RunID) (domain.Run, error)
+	GetOperation(context.Context, domain.OperationID) (domain.Operation, error)
 	GetSnapshot(context.Context) (domain.Snapshot, error)
 	ResolveRequest(context.Context, domain.RequestID) (domain.Receipt, error)
 	Subscribe(context.Context, string) (<-chan domain.Event, error)

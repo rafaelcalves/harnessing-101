@@ -63,6 +63,9 @@ func (fakeSession) GetMessage(context.Context, domain.MessageID) (domain.Message
 func (fakeSession) GetRun(context.Context, domain.RunID) (domain.Run, error) {
 	return domain.Run{}, unsupported()
 }
+func (fakeSession) GetOperation(context.Context, domain.OperationID) (domain.Operation, error) {
+	return domain.Operation{}, unsupported()
+}
 func (fakeSession) GetSnapshot(context.Context) (domain.Snapshot, error) {
 	return domain.Snapshot{}, unsupported()
 }

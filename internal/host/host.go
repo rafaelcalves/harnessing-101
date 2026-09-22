@@ -76,6 +76,7 @@ type Capabilities interface {
 	GetMessage(ctx context.Context, messageID domain.MessageID) (domain.Message, error)
 	GetAgent(ctx context.Context, agentID domain.AgentID) (domain.Agent, error)
 	GetRun(ctx context.Context, runID domain.RunID) (domain.Run, error)
+	GetOperation(ctx context.Context, operationID domain.OperationID) (domain.Operation, error)
 	GetSnapshot(ctx context.Context) (domain.Snapshot, error)
 
 	// ResolveRequest is ADR 0004's caller-bound resolution operation
@@ -221,6 +222,10 @@ func (w *workspace) GetRun(ctx context.Context, runID domain.RunID) (domain.Run,
 	return w.engine.GetRun(ctx, runID)
 }
 
+func (w *workspace) GetOperation(ctx context.Context, operationID domain.OperationID) (domain.Operation, error) {
+	return w.engine.GetOperation(ctx, operationID)
+}
+
 func (w *workspace) GetSnapshot(ctx context.Context) (domain.Snapshot, error) {
 	return w.engine.GetSnapshot(ctx)
 }
@@ -309,6 +314,9 @@ func (s *frontendSession) GetMessage(ctx context.Context, id domain.MessageID) (
 }
 func (s *frontendSession) GetRun(ctx context.Context, id domain.RunID) (domain.Run, error) {
 	return s.caps.GetRun(ctx, id)
+}
+func (s *frontendSession) GetOperation(ctx context.Context, id domain.OperationID) (domain.Operation, error) {
+	return s.caps.GetOperation(ctx, id)
 }
 func (s *frontendSession) GetSnapshot(ctx context.Context) (domain.Snapshot, error) {
 	return s.caps.GetSnapshot(ctx)

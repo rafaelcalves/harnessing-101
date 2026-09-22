@@ -460,6 +460,13 @@ func cloneSnapshot(snap domain.Snapshot) domain.Snapshot {
 			out.Runs[i].ExitedAt = &v
 		}
 	}
+	out.Operations = append([]domain.Operation{}, snap.Operations...)
+	for i := range out.Operations {
+		if snap.Operations[i].CompletedAt != nil {
+			v := *snap.Operations[i].CompletedAt
+			out.Operations[i].CompletedAt = &v
+		}
+	}
 	return out
 }
 
@@ -785,6 +792,15 @@ func (e *Engine) StartRun(ctx context.Context, caller CallerScope, req StartRunR
 		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "toolExecutable requires a non-empty toolArgv"}
 	}
 
+	// operationID is boundaries.md's command-completion requirement
+	// (line 40: "StartRun/StopRun return operation IDs"): derived
+	// deterministically from RunID rather than freshly generated, so a
+	// replayed request returns the SAME operation identity as the
+	// original commit — Creed's "receipt/operationID before any spawn"
+	// and Stanley's D5 ruling both require this, and a random ID would
+	// break stability across replay.
+	operationID := domain.OperationID(req.RunID + "-start")
+
 	// Step 1 — persist start intent. CF1: authorization is `caller`
 	// (host-established scope), never req.AgentID/req.ProfileID
 	// themselves — those only select which agent/profile to check.
@@ -823,6 +839,10 @@ func (e *Engine) StartRun(ctx context.Context, caller CallerScope, req StartRunR
 			Revision:   1,
 			Provenance: e.claimedProvenance(caller, now),
 		})
+		snap.Operations = append(snap.Operations, domain.Operation{
+			ID: operationID, RunID: domain.RunID(req.RunID), Kind: "StartRun",
+			State: domain.OperationPending, CreatedAt: now,
+		})
 		ev, err := e.event(ctx, "RunStarting", now, req.RunID)
 		if err != nil {
 			return nil, err
@@ -832,6 +852,7 @@ func (e *Engine) StartRun(ctx context.Context, caller CallerScope, req StartRunR
 	if err != nil {
 		return receipt, err
 	}
+	receipt.OperationID = &operationID
 
 	// Step 2 — the dispatch-attempted marker, committed before Start is
 	// ever called. This commit is host-internal bookkeeping, not a
@@ -867,6 +888,9 @@ func (e *Engine) StartRun(ctx context.Context, caller CallerScope, req StartRunR
 
 			now := e.clock.WallNow()
 			snap.Runs[idx].DispatchAttemptedAt = &now
+			if opIdx, _, found := findOperation(snap, operationID); found {
+				snap.Operations[opIdx].State = domain.OperationRunning
+			}
 			ev, err := e.event(ctx, "RunDispatchAttempted", now, req.RunID)
 			if err != nil {
 				return nil, err
@@ -876,7 +900,7 @@ func (e *Engine) StartRun(ctx context.Context, caller CallerScope, req StartRunR
 		return err
 	}()
 	if markerErr != nil {
-		return domain.Receipt{}, markerErr
+		return receipt, markerErr
 	}
 
 	afterDispatchMarkerBeforeStart()
@@ -908,10 +932,16 @@ func (e *Engine) StartRun(ctx context.Context, caller CallerScope, req StartRunR
 				return nil, &domain.Error{Code: domain.ErrConflict, Detail: "run vanished before observation"}
 			}
 			now := e.clock.WallNow()
+			opIdx, _, opFound := findOperation(snap, operationID)
 			if startErr != nil {
 				snap.Runs[idx].State = domain.RunExited
 				snap.Runs[idx].ExitedAt = &now
 				snap.Runs[idx].ExitReason = startErrorCode(startErr)
+				if opFound {
+					snap.Operations[opIdx].State = domain.OperationFailed
+					snap.Operations[opIdx].CompletedAt = &now
+					snap.Operations[opIdx].Outcome = startErrorCode(startErr)
+				}
 				ev, err := e.event(ctx, "RunExited", now, req.RunID)
 				if err != nil {
 					return nil, err
@@ -920,6 +950,11 @@ func (e *Engine) StartRun(ctx context.Context, caller CallerScope, req StartRunR
 			}
 			snap.Runs[idx].State = domain.RunRunning
 			snap.Runs[idx].StartedAt = &now
+			if opFound {
+				snap.Operations[opIdx].State = domain.OperationSucceeded
+				snap.Operations[opIdx].CompletedAt = &now
+				snap.Operations[opIdx].Outcome = "Started"
+			}
 			ev, err := e.event(ctx, "RunStarted", now, req.RunID)
 			if err != nil {
 				return nil, err
@@ -929,10 +964,10 @@ func (e *Engine) StartRun(ctx context.Context, caller CallerScope, req StartRunR
 		return err
 	}()
 	if observeErr != nil {
-		return domain.Receipt{}, observeErr
+		return receipt, observeErr
 	}
 	if startErr != nil {
-		return domain.Receipt{}, startErr
+		return receipt, startErr
 	}
 	return receipt, nil
 }
@@ -959,6 +994,21 @@ func (e *Engine) GetRun(ctx context.Context, runID domain.RunID) (domain.Run, er
 	return run, nil
 }
 
+// GetOperation is a read, not a command: no receipt, no idempotency
+// ledger. boundaries.md line 40: this is how a caller obtains progress
+// and terminal outcomes for a StartRun/StopRun receipt's OperationID.
+func (e *Engine) GetOperation(ctx context.Context, id domain.OperationID) (domain.Operation, error) {
+	snap, err := e.store.Load(ctx, e.workspaceID)
+	if err != nil {
+		return domain.Operation{}, err
+	}
+	_, op, found := findOperation(&snap, id)
+	if !found {
+		return domain.Operation{}, &domain.Error{Code: domain.ErrNotFound, Detail: "operation not found"}
+	}
+	return op, nil
+}
+
 func findProfile(snap *domain.Snapshot, id string) (domain.Profile, bool) {
 	for _, p := range snap.Profiles {
 		if p.ProfileID == id {
@@ -975,6 +1025,15 @@ func findRun(snap *domain.Snapshot, id domain.RunID) (int, domain.Run, bool) {
 		}
 	}
 	return 0, domain.Run{}, false
+}
+
+func findOperation(snap *domain.Snapshot, id domain.OperationID) (int, domain.Operation, bool) {
+	for i, op := range snap.Operations {
+		if op.ID == id {
+			return i, op, true
+		}
+	}
+	return 0, domain.Operation{}, false
 }
 
 // findActiveRunForAgent implements h101-128 line 43's per-agent

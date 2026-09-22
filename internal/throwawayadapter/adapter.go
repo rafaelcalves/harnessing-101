@@ -195,6 +195,14 @@ func (a *Adapter) dispatch(ctx context.Context, envelope Envelope) (interface{},
 			return nil, invalidPayload()
 		}
 		return a.session.GetRun(ctx, req.RunID)
+	case "operation":
+		var req struct {
+			OperationID domain.OperationID `json:"operationID"`
+		}
+		if err := decode(&req); err != nil {
+			return nil, invalidPayload()
+		}
+		return a.session.GetOperation(ctx, req.OperationID)
 	case "snapshot":
 		return a.session.GetSnapshot(ctx)
 	case "resolve":

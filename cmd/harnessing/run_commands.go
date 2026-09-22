@@ -141,3 +141,41 @@ func printRun(w io.Writer, r domain.Run) {
 		_, _ = fmt.Fprintf(w, "  ExitReason: %s\n", r.ExitReason)
 	}
 }
+
+// runOperationQuery implements `harnessing operation`: boundaries.md
+// line 40's read path for a StartRun/StopRun receipt's OperationID —
+// progress and terminal outcome, separate from the Run's own state.
+func runOperationQuery(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("operation", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	wf := addWorkspaceFlags(fs)
+
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if fs.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "harnessing operation: exactly one operationID argument is required")
+		return 1
+	}
+	operationID := domain.OperationID(fs.Arg(0))
+
+	return withSession(stderr, wf, "", "operation", func(ctx context.Context, session api.FrontendSession) int {
+		op, err := session.GetOperation(ctx, operationID)
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, "harnessing operation: "+describeError(err))
+			return 1
+		}
+		printOperation(stdout, op)
+		return 0
+	})
+}
+
+func printOperation(w io.Writer, op domain.Operation) {
+	_, _ = fmt.Fprintf(w, "Operation %s\n", op.ID)
+	_, _ = fmt.Fprintf(w, "  RunID:   %s\n", op.RunID)
+	_, _ = fmt.Fprintf(w, "  Kind:    %s\n", op.Kind)
+	_, _ = fmt.Fprintf(w, "  State:   %s\n", op.State)
+	if op.Outcome != "" {
+		_, _ = fmt.Fprintf(w, "  Outcome: %s\n", op.Outcome)
+	}
+}
