@@ -7,10 +7,15 @@ Kelly QA. **Bar only** — blocks item 10 engineering dispatch.
 availability cost of no timeout-takeover **not** a construction gate. Never-infer
 vocabulary added.
 
+**Amended H101-206 (2026-09-22):** Angela H101-204 — three distinct recovery actions
+(RECONNECT / REPLACE / DISCONNECT) with positive observables; reconnect≠replace and
+failed-recovery≠free-slot guards testable; connection-attention ≠ task Blocked;
+actionable conflict errors; staleness cites **last connector contact**.
+
 **Authority:** owner H101-163/H101-174; Stanley
 [`h101-171-session-registration-protocol.md`](../architecture/h101-171-session-registration-protocol.md);
-Kelly H101-172/H101-196; Angela H101-177 (cooperative check-in first product,
-participation profile); Creed H101-197.
+Kelly H101-172/H101-196; Angela H101-177/H101-204 (cooperative check-in, recovery
+actions — user-facing names, not CLI command names); Creed H101-197.
 
 **Single item.** Managed launch for Claude Code remains backlog **B** (H101-174);
 this item is the **attachment-first** proof. It does **not** discharge item 1 Layer B,
@@ -92,8 +97,13 @@ After registration fixture run via fresh CLI subprocesses:
 | R5 | No `RunID` created for registration path (query run list / documented negative) |
 | R6 | `managedStartRunUsed` guard: no `StartRun` receipt in registration test log |
 | R7 | **Pre-pair disclosure (MUST):** before pairing redemption succeeds, shipped pairing preview/invitation surface (CLI or documented equivalent) emits **all** required disclosure lines below — not aspirational |
-| R8 | **Stuck-slot observability:** when registration is `Stale` or `Disconnected`, shipped query shows that state and names the blocking slot (agent still occupied) |
-| R9 | **Documented recovery:** from `Stale`/`Disconnected`, the guide-named **explicit user replacement/revoke** command succeeds, slot releases, and a fresh pairing (or managed start when otherwise eligible) is admitted — no timeout-based auto-takeover |
+| R8 | **Stuck-slot observability:** when registration is `Stale` or `Disconnected`, shipped query shows that state, names the blocking slot, and cites **`last connector contact`** (exact substring) — **not** last-agent-activity wording |
+| R9 | **Three recovery actions** (Angela H101-204 — distinct product meanings, each with shipped CLI mapped in guide; user-facing labels below are criteria vocabulary, not command names) |
+| R10 | **RECONNECT ≠ REPLACE (positive):** see [R9 scenarios](#r9--three-recovery-actions-angela-h101-204) — same `ParticipationSessionID` after reconnect; new ID only after explicit replace |
+| R11 | **Registration removal ≠ agent retirement (positive):** after REPLACE or DISCONNECT, `agentId` still listed; assigned tasks/messages unchanged; agent record not deleted |
+| R12 | **Failed recovery ≠ free slot (positive):** failed recovery exits non-zero; query still `Stale`/`Disconnected` with slot occupied; error names remaining condition **and** lists `RECONNECT` / `REPLACE` / `DISCONNECT` choices |
+| R13 | **Connection attention ≠ task Blocked:** task stays `Doing` (or prior non-Blocked state) when registration becomes `Stale` — connection loss alone does not flip task to `Blocked` |
+| R14 | **Actionable slot conflict:** conflicting pair or managed-start attempt returns stable error naming occupied registration state **and** lists all three recovery choices — not bare `slot occupied` |
 
 ### R7 — required pre-pair disclosure lines (MUST)
 
@@ -116,21 +126,61 @@ or named JSON field — engineer documents which):
 **Not sufficient:** disclosure only in external docs; post-pair-only copy; UI hide without
 CLI-testable surface.
 
-### R8–R9 — stuck slot (availability cost not gated; recovery route required)
+### R8 — stuck slot observability
 
-Creed H101-197: abandoned `Stale`/`Disconnected` bindings can block re-pairing **and**
-managed start until explicit user replacement — **integrity-preserving, availability-
-costing**. That tradeoff does **not** gate construction (Angela product call on whether
-to soften later).
+Creed H101-197 availability tradeoff **not** gated (no timeout takeover). User must
+**see** stuck state (R8) — never silent indefinite block. Staleness reason must cite
+connector contact only (Angela H101-204).
 
-Item 10 **does** require:
+### R9 — three recovery actions (Angela H101-204)
 
-1. User can **see** the stuck state (R8) — never silent indefinite block.
-2. User has a **documented, testable** escape (R9) — H101-171 explicit
-   replace/revoke/unregister path; no invented timeout takeover.
+Three user-facing actions with **different effects** — tests must prove the distinction,
+not collapse them into one "replace/revoke".
 
-**Negative (preserved):** heartbeat staleness does **not** auto-release slot; test must
-not assert timeout-based takeover as pass behavior.
+| Action | Meaning | Passing positive observables (Layer A fixture) |
+| --- | --- | --- |
+| **RECONNECT** | Restore **same** conversation through required revalidation | After `Stale`: reconnect succeeds (exit 0); query shows `Connected`; **`ParticipationSessionID` unchanged**; pending message still deliverable; fixture ack with **same** binding succeeds |
+| **REPLACE** | Bind a **different** conversation; old session loses workspace-mutation permission; does **not** stop old external program; work/messages/history stay with **agent** | Replace succeeds; query shows **new** `ParticipationSessionID` ≠ prior; **prior binding cannot authorize mutations** (stable `Denied`); **agent + tasks + messages unchanged**; fixture records old external PID **still running** (test marker file) |
+| **DISCONNECT** | Close registration **without** replacement; releases reservation; does **not** stop external tool; does **not** clear separate managed-run recovery restriction | Disconnect succeeds; registration `Closed`; slot admits new pairing; **agent still listed**; external PID marker **still running**; if managed run `RecoveryRequired` on same agent, `StartRun` still blocked per H101-171 dual-admission |
+
+**No timeout, auto-release, or takeover** in criteria or tests (Angela + Creed preserved).
+
+#### R10 — reconnect must not silently mean replace
+
+Negative guard needs **positive** observables (item 5 lesson):
+
+1. **Reconnect path (R10a):** `ParticipationSessionID` **equals** pre-stale value `S1`.
+2. **Replace path (R10b):** `ParticipationSessionID` **not equal** `S1`; old binding denied.
+
+Pass requires **both** scenarios in CI (may be subtests). Reconnect that mints a new
+session ID without user choosing replace → **D14**.
+
+#### R11 — removing registration must not retire agent
+
+After REPLACE or DISCONNECT: `agentId` query returns same record; at least one
+pre-existing task/message row unchanged. Agent delete or hide → **D15**.
+
+#### R12 — failed recovery must not imply slot is free
+
+Induce failed reconnect (invalid credential / wrong generation fixture). Assert **all**:
+
+| Observable | Requirement |
+| --- | --- |
+| Exit code | **Non-zero** |
+| Registration query | Still `Stale` or `Disconnected`; slot **occupied** |
+| Error surface | Names remaining condition + contains all three tokens: `RECONNECT`, `REPLACE`, `DISCONNECT` |
+| Follow-on conflict | Fresh pair attempt still `Conflict` with actionable error (R14), **not** admitted as if slot were free |
+
+#### R13 — connection attention ≠ task Blocked
+
+Fixture: task in `Doing`, registration goes `Stale`. Task query still `Doing` (not
+`Blocked`) until a **separate** user blocker action. Auto-Blocked on staleness alone → **D17**.
+
+#### R14 — actionable slot conflict
+
+On occupied-slot pair or managed-start conflict, error body (CLI stderr or named JSON
+field) contains: registration state label + all three recovery choice tokens. Bare
+`slot occupied` without choices → **D18**.
 
 Layer B adds manifest file + runner stdout tails per H101-153 anti-fraud rules.
 
@@ -150,8 +200,14 @@ Layer B adds manifest file + runner stdout tails per H101-153 anti-fraud rules.
 | D8 | Disclosure omits user-paired / tool-unverified limit | **Docs** | Item 8 CF2 cross-ref |
 | D9 | Pre-pair disclosure missing any R7 token or appears only after pairing | **Product** | Creed H101-203 — security-load-bearing MUST |
 | D10 | `Stale`/`Disconnected` slot blocks admission but query shows Connected or silent | **Product** | R8 observability |
-| D11 | No documented user replacement/revoke path from stuck slot | **Docs/Product** | R9 recovery |
+| D11 | Recovery collapses RECONNECT/REPLACE/DISCONNECT into one undifferentiated action | **Product** | R9 — Angela H101-204 |
 | D12 | Test or product uses timeout-based slot takeover | **Product** | H101-171 forbidden shortcut |
+| D14 | Reconnect mints new `ParticipationSessionID` without explicit replace | **Product** | R10 — silent replace |
+| D15 | REPLACE/DISCONNECT deletes or hides agent record | **Product** | R11 |
+| D16 | Failed recovery returns success or query shows slot free / `Closed` without user disconnect | **Product** | R12 |
+| D17 | Registration `Stale` alone flips task to `Blocked` | **Product** | R13 — Angela H101-204 |
+| D18 | Slot conflict error is bare `slot occupied` without recovery choices | **Product** | R14 |
+| D19 | Staleness reason cites last agent activity / model attention | **Product** | R8 — must be last connector contact |
 
 ---
 
@@ -202,4 +258,4 @@ Registered external sessions are **not** product-managed starts. Copy must state
 **NOT SATISFIED** — bar only. Dispatch blocked until god commits this spec and
 Stanley/security gates clear construction per H101-171.
 
-Authored by Kelly (QA), H101-196. Amended H101-203.
+Authored by Kelly (QA), H101-196. Amended H101-203, H101-206.
