@@ -322,9 +322,18 @@ Full amendment authority: Angela H101-146 / owner H101-142. Ruling:
 | D4 | Stop only kills parent, leaves child worker running | **Product** | Tree termination |
 | D5 | Test asserts exit from mock without spawning real child | **Test** | Insufficient for item 2 — mock OK only for adaptercontract **error-path** rows, not this item's termination proof |
 
+### H101-217 — Stop identity binding acceptance spec (2026-09-22)
+
+H101-218 (Kevin) blocked until this bar commits. Retained-leader `waitid`/`WNOWAIT`
+binding per h101-215; termination-vs-reaping vocabulary; Layer A (H101-209 mode B) +
+Layer B native lifecycle recorder (ordering not provable at CLI alone). Creed five
+points mapped. Full spec:
+[`h101-217-stop-identity-binding-acceptance-spec.md`](h101-217-stop-identity-binding-acceptance-spec.md).
+
 ### H101-209 — Item 2 acceptance spec (2026-09-22)
 
-Item 2 engineering blocked until amended spec commits. **Producers:**
+Item 2 engineering blocked until amended spec commits **and** H101-218 binding lands.
+**Producers:**
 `spawn_worker_then_block`, `parent_exits_worker_survives` (H101-213 ordering:
 parent-release after `Running`), `fast_parent_idle_worker` (N2 negative). Serve-owned;
 PID-probe artefacts. **Amended H101-213:** Stanley h101-212 — no groupExists startup
