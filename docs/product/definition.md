@@ -20,6 +20,8 @@ Several terminals already provide parallel execution. Harnessing 101 earns its p
 
 The minimum is a local, inspectable coordination workspace for two manually started agents and one human. It supports one complete cycle: assign, hand off, report a blocker, resolve it, and review a result.
 
+**Owner-directed refinement, not implemented:** [Connecting existing sessions (H101-175)](#connecting-existing-sessions-h101-175) distinguishes session registration from managed launch and states the remaining scope decision.
+
 The user can create a workspace in a chosen directory, register named agents, and see how to connect their existing sessions. They can create a task with one accountable owner, send a task-linked message, inspect pending messages, and see whether a message was recorded or acknowledged. Acknowledgement must not be presented as proof that work happened.
 
 One status view answers: what is assigned, what is reported in progress, what is blocked, and what has a result ready for review. Every status identifies its reporter and last update; old reports must not imply a live process. A result includes a concise explanation and a local artifact reference. “Reported complete” remains distinct from human acceptance. After closing and reopening the interface, the user can recover these records without resending work.
@@ -128,3 +130,27 @@ Avoid sitcom names, character avatars, office-floor visuals, and borrowed slogan
 **INFERENCE — user-facing explanation:** “Workspace revision identifies a recorded version of your workspace; it advances when commands or background delivery record changes, so it is not a count of your commands.”
 
 **CODE-PATH FACT:** [the receipt formatter](../../cmd/harnessing/flags.go) already prints the request identifier and `workspace revision` using the receipt's committed revision. **INFERENCE — documentation consequence:** no change to the CLI receipt line is requested. Put the explanation beside the first receipt example in the README and explain background advances and replayed receipts in troubleshooting guidance. Route those edits to their current documentation owner. This ruling does not decide cross-adapter assertions, exact revision totals, or implementation changes.
+
+## Connecting existing sessions (H101-175)
+
+**Status — 2026-09-22: owner-directed work, not implemented.** The owner's H101-163 decision adds registration of an already-open agent session linked to a workspace agent and profile. This is a product amendment to H101-146's launch-focused framing, carried into [H101-147](../quality/h101-147-phase3-item1-amendment.md); it is not a shipped connection feature or a claim of Claude Code, Codex or Cursor Agent compatibility.
+
+### User-facing direction
+
+**Proposed experience:** “Bring the agent tools you already use. Connect an existing session to a named agent and profile in your workspace so it can participate in tasks and messages through the supported protocol. Alternatively, have Harnessing 101 start a supported installed tool using a profile you have approved. Connecting an existing session does not make its process managed by Harnessing 101.”
+
+This wording describes the intended participation paths, not their current availability. Lead with the user who brings their own sessions; managed launch is an additional path when supported and approved. Sections 1–2 already identify that user and the job of coordinating existing sessions. The user continues to install and authenticate their chosen tools; this amendment adds no bundled model access or implicit provider setup.
+
+**Product rationale, not measured user benefit:** connecting a session that already holds useful context could avoid restarting it solely to join the workspace. That is why this refinement is preferred; neither reduced setup effort nor improved coordination has been established by user research or a successful real-tool walkthrough.
+
+### Participation is separate from process control
+
+Registration is an additional participation path, not a replacement for managed launch. Linking a session records which participant it represents. It must not imply that Harnessing 101 launched the session, verified its executable or provider identity, gained process control, or can enforce its budgets. Registration alone is not message consumption, acknowledgement or completed work. A profile association does not make unverified content trustworthy or grant human-review authority.
+
+Human acceptance, explicit authority, unverified-content disclosures and approval requirements for product-managed starts remain unchanged. Registration does not retroactively turn a user-started process into a managed run.
+
+**Evidence boundary:** [Kelly's H101-172 ruling](../quality/h101-172-layerb-registration-ruling.md) places registered external sessions outside Phase 3 item 1's Layer B managed-start evidence. Registration does not discharge that obligation or demonstrate Claude Code compatibility by itself. This amendment changes no acceptance criteria or protocol.
+
+### Scope still to be settled
+
+H101-174 asks whether the current delivery scope is attachment first, with managed-launch participation deferred, or both paths. Either answer preserves the distinction above. Revisit the delivery sequence and availability wording when that decision is recorded; do not infer that both paths must ship together, or that attachment cancels managed-launch obligations without an explicit scope decision. Stanley owns the participation protocol and Kelly owns its evidence requirements. This amendment authorizes no graphical interface or expansion of agent-orchestrator authority.
