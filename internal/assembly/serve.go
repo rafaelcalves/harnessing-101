@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 
 	"github.com/rafaelcalves/harnessing-101/internal/adapters/idsource"
+	"github.com/rafaelcalves/harnessing-101/internal/adapters/mailbox"
 	"github.com/rafaelcalves/harnessing-101/internal/adapters/transport"
 	"github.com/rafaelcalves/harnessing-101/internal/api"
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
@@ -36,6 +38,34 @@ func Serve(ctx context.Context, stderr io.Writer, root string, workspaceID domai
 		Generation: generation,
 		Bind: func(_ context.Context, attach transport.AttachPayload) (api.FrontendSession, error) {
 			return host.BindFrontendSession(caps, attach.CallerAgentID), nil
+		},
+		Tick: func(tickCtx context.Context) error {
+			mail, err := mailbox.Open(filepath.Join(root, mailboxSubdir))
+			if err != nil {
+				_, _ = fmt.Fprintf(stderr, "harnessing serve: mailbox delivery: %s\n", describeError(err))
+				return nil // retry on the next host tick
+			}
+			deliverer := mailbox.NewDeliverer(mail, caps)
+			if err := deliverer.DeliverPending(tickCtx); err != nil {
+				_, _ = fmt.Fprintf(stderr, "harnessing serve: mailbox delivery: %s\n", describeError(err))
+				return nil
+			}
+			if err := deliverer.IngestPending(tickCtx); err != nil {
+				_, _ = fmt.Fprintf(stderr, "harnessing serve: mailbox delivery: %s\n", describeError(err))
+				return nil
+			}
+			snapshot, err := caps.GetSnapshot(tickCtx)
+			if err != nil {
+				_, _ = fmt.Fprintf(stderr, "harnessing serve: mailbox delivery: %s\n", describeError(err))
+				return nil
+			}
+			for _, agent := range snapshot.Agents {
+				if err := deliverer.IngestAcks(tickCtx, agent.ID); err != nil {
+					_, _ = fmt.Fprintf(stderr, "harnessing serve: mailbox delivery: %s\n", describeError(err))
+					return nil
+				}
+			}
+			return nil
 		},
 	}
 	runErr := h.Run(ctx)

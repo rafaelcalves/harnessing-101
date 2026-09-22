@@ -24,9 +24,13 @@ const DefaultPollInterval = 100 * time.Millisecond
 // the only place authority is granted, and that call is assembly's, not
 // this package's.
 type Host struct {
-	Root         string
-	Generation   string
-	Bind         func(ctx context.Context, attach AttachPayload) (api.FrontendSession, error)
+	Root       string
+	Generation string
+	Bind       func(ctx context.Context, attach AttachPayload) (api.FrontendSession, error)
+	// Tick is an optional assembly-owned effect pass. Host invokes it from
+	// the same serialized poll loop as session dispatch, so callers cannot
+	// race a host-owned state effect with transport mutation.
+	Tick         func(ctx context.Context) error
 	Unbind       func(sessionID string)
 	PollInterval time.Duration
 }
@@ -84,6 +88,11 @@ func (h *Host) tick(ctx context.Context, bound map[string]api.FrontendSession) e
 			if h.Unbind != nil {
 				h.Unbind(id)
 			}
+		}
+	}
+	if h.Tick != nil {
+		if err := h.Tick(ctx); err != nil {
+			return err
 		}
 	}
 	return nil

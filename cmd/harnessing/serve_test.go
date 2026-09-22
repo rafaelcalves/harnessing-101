@@ -9,6 +9,7 @@ import (
 
 	"github.com/rafaelcalves/harnessing-101/internal/api"
 	"github.com/rafaelcalves/harnessing-101/internal/assembly"
+	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
 	"github.com/rafaelcalves/harnessing-101/internal/host"
 )
 
@@ -92,4 +93,70 @@ func TestRun_ServeAttachRoundTripThenDetach(t *testing.T) {
 		t.Fatalf("workspace still locked after serve's graceful SIGTERM close: %v", err)
 	}
 	_ = caps.Close()
+}
+
+// TestRun_ServePumpsMailboxAfterSenderDetaches is H101-155's load-bearing
+// regression test. A continuing host, rather than a one-shot CLI command,
+// must publish/process queued mail after the sender session detaches.
+func TestRun_ServePumpsMailboxAfterSenderDetaches(t *testing.T) {
+	dir := t.TempDir()
+	cmd, out := startHoldHelper(t, []string{"serve", "-workspace", dir, "-workspace-id", "ws-mail"})
+	line, err := out.ReadString('\n')
+	if err != nil || !strings.Contains(line, "listening") {
+		t.Fatalf("serve did not report listening (line=%q, err=%v)", line, err)
+	}
+	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sender, err := assembly.Attach(ctx, dir, "engineer")
+	if err != nil {
+		t.Fatalf("sender Attach: %v", err)
+	}
+	if _, err := sender.RegisterAgent(ctx, api.RegisterAgentRequest{RequestID: "reg-engineer", AgentID: "engineer", DisplayName: "Engineer"}); err != nil {
+		t.Fatalf("register engineer: %v", err)
+	}
+	if err := sender.Detach(ctx); err != nil {
+		t.Fatalf("sender setup Detach: %v", err)
+	}
+	registrar, err := assembly.Attach(ctx, dir, "reviewer")
+	if err != nil {
+		t.Fatalf("reviewer registrar Attach: %v", err)
+	}
+	if _, err := registrar.RegisterAgent(ctx, api.RegisterAgentRequest{RequestID: "reg-reviewer", AgentID: "reviewer", DisplayName: "Reviewer"}); err != nil {
+		t.Fatalf("register reviewer: %v", err)
+	}
+	if err := registrar.Detach(ctx); err != nil {
+		t.Fatalf("reviewer registrar Detach: %v", err)
+	}
+	sender, err = assembly.Attach(ctx, dir, "engineer")
+	if err != nil {
+		t.Fatalf("sender reattach: %v", err)
+	}
+	if _, err := sender.SendMessage(ctx, api.SendMessageRequest{RequestID: "send-1", MessageID: "mail-1", SenderAgentID: "engineer", RecipientAgentID: "reviewer", Kind: domain.MessageRequest, Body: "review this"}); err != nil {
+		t.Fatalf("send message: %v", err)
+	}
+	if err := sender.Detach(ctx); err != nil {
+		t.Fatalf("sender Detach: %v", err)
+	}
+
+	observer, err := assembly.Attach(ctx, dir, "observer")
+	if err != nil {
+		t.Fatalf("observer Attach: %v", err)
+	}
+	defer func() { _ = observer.Detach(context.Background()) }()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		msg, getErr := observer.GetMessage(ctx, "mail-1")
+		if getErr != nil {
+			t.Fatalf("GetMessage: %v", getErr)
+		}
+		if msg.PublishedAt != nil && msg.ProcessedAt != nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("message delivery facts = queued:%v published:%v processed:%v; serve did not pump after sender detach", msg.QueuedAt != nil, msg.PublishedAt != nil, msg.ProcessedAt != nil)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
