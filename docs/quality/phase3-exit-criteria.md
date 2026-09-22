@@ -351,6 +351,31 @@ Cross-target native evidence on both ADR targets (same CI jobs as Phase 2).
 | D5 | Crash test kills after `Close` | **Test** | Not unclean exit |
 | D6 | Assert run state only via `host.GetSnapshot`, not CLI/`harnessing` query | **Test** | Same class as H101-104 D8 |
 
+### H101-180 — Item 4 standing at `2b76d80` (2026-09-22)
+
+**Verdict: NOT SATISFIED.** H101-170 minimal slice **PARTIALLY ACCEPTED** — authorised
+increment only. Four new tests PASS under `-race` (`make build test vet lint fmt` green).
+
+| Stanley E# / row | Verdict |
+| --- | --- |
+| E1 reconcile before admit | **SATISFIED** |
+| E2 `RecoveryRequired` through product (CLI) | **NOT SATISFIED** |
+| E3 same-agent refuse, no child | **SATISFIED** |
+| E4 persist across reopen | **SATISFIED** |
+| E5 unrelated agent eligible | **SATISFIED** |
+| D1 duplicate spawn | **Partial** (agent-scoped, not same-`runID`) |
+| D2 stuck `Running`, dead child | **Open** |
+| D3 surface `RecoveryRequired` | **Partial** (stuck-`Starting` at reopen) |
+| D4 output gaps | **Open** |
+| D5 unclean crash test | **SATISFIED** (native SIGKILL window) |
+| D6 CLI not host query | **Open** |
+
+Kevin's non-claims (no live supervision, adoption, termination, output continuity, item 4
+acceptance) are **correctly scoped**. Defensive Succeeded-operation guard:
+**acceptable with recorded limit** — invariant in H101-180 ruling; vacuous same-run test
+correctly avoided. Full ruling:
+[`h101-180-phase3-item4-minimal-slice-ruling.md`](h101-180-phase3-item4-minimal-slice-ruling.md).
+
 ---
 
 ### Item 5 — Real run output journal
