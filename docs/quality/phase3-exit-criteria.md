@@ -220,14 +220,13 @@ H101-128 paragraph. That requires a new `CallerScope` process-admin capability
 **D5 note:** H101-128’s “receipt/operationID before any spawn” is forwarded to Stanley
 for the existing D5 row. No change to D5 in this amendment pending his ruling.
 
-**Standing at `20a6f8a` (Kelly re-verdict 2026-09-22):** Item 1 remains **NOT
-SATISFIED**. Layer A CI and product rows below are discharged on both ADR targets
-via `make build test vet lint fmt` green locally (darwin/arm64) and the same
-suite on ubuntu + macos-14 CI. **Sole remaining item 1 blocker:** Layer B for
-Claude Code — no runner-produced manifest on record; descriptor `deferred: false`.
-Codex and Cursor Agent have owner deferrals in committed descriptors (not
-blockers). Owner decision H101-163 (participation protocol vs Claude deferral) is
-the path to close that slot; Kelly does not rule it here.
+**Standing at `c70ac28` (Kelly re-verdict H101-211, 2026-09-22):** **PHASE 3 ITEM 1:
+SATISFIED WITH LIMIT.** Layer A + product rows discharged on both ADR targets (CI
+green at `20a6f8a` chain). **Layer B:** all three named tools **SATISFIED BY OWNER
+DEFERRAL** — Claude `c70ac28` (H101-201 backlog metadata); Codex/Cursor prior
+deferrals. **Limit:** no runner-produced manifest for any named tool; Claude
+participation is item 10, not item 1. Ruling:
+[`h101-211-phase3-item1-discharge-ruling.md`](h101-211-phase3-item1-discharge-ruling.md).
 
 | Row | Verdict | Evidence (quote tails, not summaries) |
 | --- | --- | --- |
@@ -235,7 +234,8 @@ the path to close that slot; Kelly does not rule it here.
 | D18 | **SATISFIED** | `TestStartRun_SecondActiveRunForSameAgentIsConflict`, `TestStartRun_NewRunAllowedAfterPriorExit` (`5048489`) — PASS; engine-only, no dedicated CLI subprocess row |
 | D19 | **SATISFIED** | `TestStartRun_CallerScopeNotRequestFields` rewritten for self-scope (`5048489`) — PASS; engine-only |
 | R3/D10 CI negatives | **SATISFIED** | `TestCLI_StartRun_MissingToolIsHonestNotRunning`, `TestCLI_StartRun_AuthRequiredFixtureEndsExitedNotRunning`, `TestCLI_StartRun_UnsupportedContextTransportEndsExitedNotRunning` (`5048489`); engine `TestStartRun_SupervisorFailureRecordsExitedHonestly` — PASS |
-| Layer B Claude | **NOT SATISFIED** | GETTING-STARTED §9: network policy blocked before runner wrote a report; no `cycle_completed` manifest. D14/D15 runner exists; evidence file absent |
+| Layer B Claude | **SATISFIED BY OWNER DEFERRAL** | `claude-code.json` `c70ac28` — `deferred:true`, H101-174 reason, `deferral.backlog`; **not** demonstrated compatibility |
+| Layer B Codex/Cursor | **SATISFIED BY OWNER DEFERRAL** | committed deferral descriptors |
 
 ### H101-172 — Registered external session vs item 1 Layer B (2026-09-22)
 
@@ -259,9 +259,9 @@ near-term backlog.
 | New exit item | **Item 10 written** — [`h101-196-item10-registered-session-acceptance-spec.md`](h101-196-item10-registered-session-acceptance-spec.md) |
 | Backlog B vs plain deferral | **Same deferral gate**; **extra** `deferral.backlog` metadata + item 10 obligation for Claude — not identical to Codex/Cursor indefinite deferrals |
 
-**Layer B Claude after deferral commit:** **SATISFIED BY OWNER DEFERRAL** — **not**
-demonstrated managed-start compatibility. Item 1 overall re-verdict when descriptor
-lands. **Item 10 NOT SATISFIED** until implementation.
+**Layer B Claude after deferral commit:** **SATISFIED BY OWNER DEFERRAL** at `c70ac28`
+(H101-211). Item 1 overall **SATISFIED WITH LIMIT**. **Item 10 NOT SATISFIED** until
+implementation.
 
 **Honest ceiling:** Phase 3 may exit without Claude Code managed `StartRun` proof;
 attachment proved via item 10 only. Manual attachment cannot be relabelled
