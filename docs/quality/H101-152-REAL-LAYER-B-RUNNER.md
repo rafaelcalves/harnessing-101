@@ -17,11 +17,19 @@ configuration:
 - `product_surface_unavailable` (exit 24)
 - `unsupported_invocation` (exit 25)
 - `spawn_failed` (exit 26)
+- `product_start_failed` (exit 27)
 - `cycle_completed` (exit 0)
 
 `cycle_completed` is no longer inferred from tool output. A manual shell launch
 cannot satisfy the Layer B contract; authoritative product records must establish
 participation and completion.
+
+If the managed product command returns non-zero, the runner reports
+`product_start_failed` and preserves the bounded product diagnostic tail. It
+does not parse human-readable `Denied` or `Conflict` text into a tool result,
+and it does not call a product refusal a spawn failure. A future structured
+product error envelope can refine this classification without changing the
+tool descriptor contract.
 The runner therefore exits `product_surface_unavailable` against the current
 shipped CLI, whose help has no managed `start-run` command.
 

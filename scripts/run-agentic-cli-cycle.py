@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-RESULT_CODES = {"cycle_completed": 0, "owner_deferred": 19, "missing_tool": 20, "authentication_required": 21, "network_egress_refused": 22, "started_no_participation": 23, "product_surface_unavailable": 24, "unsupported_invocation": 25, "spawn_failed": 26}
+RESULT_CODES = {"cycle_completed": 0, "owner_deferred": 19, "missing_tool": 20, "authentication_required": 21, "network_egress_refused": 22, "started_no_participation": 23, "product_surface_unavailable": 24, "unsupported_invocation": 25, "spawn_failed": 26, "product_start_failed": 27}
 HOST_TIMEOUT_SECONDS = 120.0
 MAX_DIAGNOSTIC_BYTES = 16_000
 KNOWN_SLOTS = {"workspace", "workspace_id", "task_id", "agent_id", "peer_id", "profile_id", "run_id", "prompt"}
@@ -172,7 +172,7 @@ def main() -> int:
             evidence["diagnostics"]["matched"] = hint
             return fail(hint["classification"], "managed start matched a diagnostic hint; this is not participation or completion proof", evidence, report_path)
     if started.returncode != 0:
-        return fail("spawn_failed", "managed start returned non-zero without a typed diagnostic", evidence, report_path)
+        return fail("product_start_failed", "managed start returned non-zero; product diagnostics were preserved, but the runner cannot classify an unstructured product refusal as a tool spawn failure", evidence, report_path)
     return fail("started_no_participation", "start receipt is not authoritative cycle completion; query product records before any claim", evidence, report_path)
 
 
