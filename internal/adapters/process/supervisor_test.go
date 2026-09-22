@@ -123,3 +123,17 @@ func TestSupervisor_ContextFileTransportWritesParticipationContext(t *testing.T)
 		t.Fatalf("context file = %v, missing or wrong expected fields", got)
 	}
 }
+
+// TestSupervisor_RecoverIsAlwaysStructuredUnknown is H101-170's item 4
+// minimal slice: this adapter never probes a PID or adopts a process by
+// reused identifier (boundaries.md: a reused PID alone is
+// insufficient), so Recover always answers Unknown via the stable
+// RecoveryRequired code — never nil success, and never the generic
+// Unsupported this method returned before this card (which the core
+// could not distinguish from "not implemented" and therefore could not
+// safely map to a durable state transition).
+func TestSupervisor_RecoverIsAlwaysStructuredUnknown(t *testing.T) {
+	sup := &process.Supervisor{}
+	err := sup.Recover(context.Background(), "run-1")
+	mustErrorCode(t, err, domain.ErrRecoveryRequired)
+}

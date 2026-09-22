@@ -30,7 +30,13 @@ func (f *fakeSupervisor) Start(context.Context, domain.RunID, domain.ExecutionSp
 }
 func (f *fakeSupervisor) Observe(context.Context, domain.RunID) (<-chan any, error) { return nil, nil }
 func (f *fakeSupervisor) Stop(context.Context, domain.RunID, time.Duration) error   { return nil }
-func (f *fakeSupervisor) Recover(context.Context, domain.RunID) error               { return nil }
+
+// Recover mirrors internal/adapters/process.Supervisor's own minimal
+// H101-170 slice: always Unknown (domain.ErrRecoveryRequired), the
+// same structured outcome the real adapter reports, never nil.
+func (f *fakeSupervisor) Recover(context.Context, domain.RunID) error {
+	return &domain.Error{Code: domain.ErrRecoveryRequired, Detail: "fakeSupervisor never establishes ownership"}
+}
 
 // startRunMustErrorCode is this file's own copy of engine_test.go's
 // mustErrorCode: that helper lives in package task_test (black-box) and

@@ -177,8 +177,17 @@ func (s *Supervisor) Stop(ctx context.Context, runID domain.RunID, grace time.Du
 	return &domain.Error{Code: domain.ErrUnsupported, Detail: "Stop is not implemented in this Phase 3 slice"}
 }
 
+// Recover is item 4's minimal slice (H101-170): an honest,
+// conservative first answer. This adapter never probes a PID or
+// adopts a process by reused identifier — boundaries.md is explicit
+// that a reused PID alone is insufficient — so it always reports
+// ownership/outcome as Unknown via the stable RecoveryRequired code.
+// The core (never this adapter) durably maps that Unknown into the
+// run's own RecoveryRequired state; a future stronger platform
+// identity mechanism may narrow this, but is not required to
+// manufacture certainty now.
 func (s *Supervisor) Recover(ctx context.Context, runID domain.RunID) error {
-	return &domain.Error{Code: domain.ErrUnsupported, Detail: "Recover is not implemented in this Phase 3 slice"}
+	return &domain.Error{Code: domain.ErrRecoveryRequired, Detail: "process ownership/outcome cannot be established in this Phase 3 slice (no PID or identity adoption)"}
 }
 
 var _ ports.ProcessSupervisor = (*Supervisor)(nil)

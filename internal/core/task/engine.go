@@ -1037,18 +1037,119 @@ func findOperation(snap *domain.Snapshot, id domain.OperationID) (int, domain.Op
 }
 
 // findActiveRunForAgent implements h101-128 line 43's per-agent
-// ceiling: Starting or Running counts as active; Exited and
-// RecoveryRequired do not block a new start.
+// ceiling PLUS line 71's unresolved-execution block (H101-169
+// ruling): Starting, Running, and (once item 2 exists) Stopping are
+// the ordinary active ceiling; RecoveryRequired is a SEPARATE,
+// additional block on restarting that same agent until a human
+// resolves it — the two rules stack, they do not substitute for each
+// other. A prior version of this comment claimed RecoveryRequired
+// did not block a new start; that was wrong contract wording that
+// had no exercised effect only because RecoveryRequired was
+// unreachable before H101-170 built the code that sets it. Only
+// Exited (a run's own terminal, resolved fact) releases the agent.
+// No request ID, run ID, or profile in the new attempt evades this —
+// the check is keyed on agentID alone, before any new intent is
+// committed.
 func findActiveRunForAgent(snap *domain.Snapshot, agentID domain.AgentID) (domain.RunID, bool) {
 	for _, r := range snap.Runs {
 		if r.AgentID != agentID {
 			continue
 		}
-		if r.State == domain.RunStarting || r.State == domain.RunRunning {
+		switch r.State {
+		case domain.RunStarting, domain.RunRunning, domain.RunStopping, domain.RunRecoveryRequired:
 			return r.ID, true
 		}
 	}
 	return "", false
+}
+
+// ReconcileStuckRuns is item 4's minimal crash-reconciliation slice
+// (H101-170, H101-169 ruling). Call exactly once, right after this
+// host acquires the workspace lock (host.Open), before this session
+// admits any StartRun: Step 3/4 of StartRun always resolve a run out
+// of Starting within ONE synchronous call, so a run still Starting
+// when observed by a DIFFERENT session can only mean its controller
+// exited before finishing that call — the real occurrence behind
+// H101-161. No PID or identity probing is needed to know this, and
+// this slice deliberately performs none (boundaries.md: a reused PID
+// alone is insufficient). Calling this again later in the SAME
+// session would wrongly reconcile that session's own in-flight Start
+// calls; only host.Open calls it, and only once.
+func (e *Engine) ReconcileStuckRuns(ctx context.Context) error {
+	snap, err := e.store.Load(ctx, e.workspaceID)
+	if err != nil {
+		// A read failure here (e.g. a corrupt state file) is not new
+		// information this call is responsible for surfacing: every
+		// command already Loads the same store itself and renders
+		// that exact failure through its own, already-tested error
+		// path (IOFailure/UNCERTAIN rendering). Failing Open here
+		// instead would present the identical failure through a
+		// DIFFERENT, less-informative render site — same precedent as
+		// driveMailbox's best-effort framing in
+		// internal/assembly/session.go: side-work never overrides the
+		// primary path's own error surface. Nothing is lost: the next
+		// real command hits the same corruption immediately.
+		return nil
+	}
+	for _, run := range snap.Runs {
+		if run.State != domain.RunStarting {
+			continue
+		}
+		if err := e.reconcileStuckRun(ctx, run.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// reconcileStuckRun commits the one honest fact this slice can
+// assert: ownership/outcome of a Starting run is Unknown. Unknown is
+// a structured outcome (domain.ErrRecoveryRequired from Recover),
+// never nil success, parsed prose, or an ignored Unsupported — the
+// core, not the adapter, durably maps it onto the run's own state.
+// Preserves terminal historical facts: an operation already
+// Succeeded or Failed by the time this runs is never rewritten, only
+// a still-open (Pending/Running) start operation carries the
+// uncertainty outcome forward.
+func (e *Engine) reconcileStuckRun(ctx context.Context, runID domain.RunID) error {
+	recoverErr := e.supervisor.Recover(ctx, runID)
+	derr, ok := recoverErr.(*domain.Error)
+	if !ok || derr.Code != domain.ErrRecoveryRequired {
+		// This slice's own adapter always returns the Unknown outcome
+		// above; anything else — nil, or a different structured error
+		// — is a shape this minimal slice does not know how to apply.
+		// Fail loudly rather than guessing a state transition.
+		return &domain.Error{Code: domain.ErrUnsupported, Detail: "Recover returned an outcome this Phase 3 slice cannot reconcile"}
+	}
+
+	outcomeID, err := e.ids.NewID(ctx)
+	if err != nil {
+		return err
+	}
+	operationID := domain.OperationID(string(runID) + "-start")
+	fp := fingerprint("RunReconcile", string(runID))
+	_, err = e.commit(ctx, CallerScope{}, domain.RequestID(outcomeID), fp, func(snap *domain.Snapshot) ([]domain.Event, error) {
+		idx, run, found := findRun(snap, runID)
+		if !found || run.State != domain.RunStarting {
+			// Already resolved by the time this commit runs — no-op,
+			// not an error.
+			return nil, nil
+		}
+		now := e.clock.WallNow()
+		snap.Runs[idx].State = domain.RunRecoveryRequired
+		if opIdx, op, found := findOperation(snap, operationID); found &&
+			(op.State == domain.OperationPending || op.State == domain.OperationRunning) {
+			snap.Operations[opIdx].State = domain.OperationRecoveryRequired
+			snap.Operations[opIdx].CompletedAt = &now
+			snap.Operations[opIdx].Outcome = string(domain.ErrRecoveryRequired)
+		}
+		ev, err := e.event(ctx, "RunRecoveryRequired", now, string(runID))
+		if err != nil {
+			return nil, err
+		}
+		return []domain.Event{ev}, nil
+	})
+	return err
 }
 
 // MessageDeliveryRequest identifies a delivery fact recorded by the host.

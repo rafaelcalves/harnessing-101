@@ -128,6 +128,16 @@ func Open(root string, workspaceID domain.WorkspaceID, reviewerAgentIDs []domain
 	engine := task.NewEngine(store, clock.NewSystem(), idsource.Random{}, workspaceID)
 	engine.SetProcessSupervisor(&process.Supervisor{ContextDir: filepath.Join(root, "runs")})
 
+	// H101-170 (item 4 minimal slice): reconcile any run left Starting
+	// by a controller that crashed before this host existed — exactly
+	// once, before this new host admits any StartRun of its own. See
+	// task.Engine.ReconcileStuckRuns for why this must run here and
+	// only here, not on every command.
+	if err := engine.ReconcileStuckRuns(context.Background()); err != nil {
+		_ = store.Close()
+		return nil, err
+	}
+
 	reviewers := make(map[domain.AgentID]bool, len(reviewerAgentIDs))
 	for _, id := range reviewerAgentIDs {
 		reviewers[id] = true
