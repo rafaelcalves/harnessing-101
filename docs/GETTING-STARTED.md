@@ -6,8 +6,8 @@ acknowledge it, record and resolve a blocker, reject and replace a result, and
 accept the replacement.
 
 The manual workflow was run against commit `f2d99fb` on 2026-09-21. The Layer B
-preflight was run against `29fd50e` on 2026-09-22. Each produced the output
-described below.
+commands were rechecked on 2026-09-22 after the managed-start surface landed.
+The observed outcomes and their limits are recorded below.
 
 ## What this guide does—and does not—connect
 
@@ -374,12 +374,50 @@ start an approved agent tool and record authoritative participation and task
 completion. The current product cannot complete that trial yet. This preflight
 records exactly where it stops without treating tool output as proof of work.
 
-Before running it, install and authenticate Claude Code yourself and confirm
-that `claude --version` succeeds. Harnessing 101 and this runner never install a
-tool, sign in, change credentials, or change provider configuration.
+Before running it, install and authenticate Claude Code yourself. Harnessing 101
+and this runner never install a tool, sign in, change credentials, or change
+provider configuration.
 
 From the repository root, after building `./bin/harnessing` and completing the
-workspace setup and human assignment above, run:
+workspace setup and human assignment above, resolve the installed executable:
+
+```sh
+CLAUDE_BIN="$(command -v claude)"
+test -x "$CLAUDE_BIN"
+claude --version
+```
+
+### Approve the exact execution profile
+
+The profile identifier passed to Layer B is not a label that creates itself. An
+authorized human reviewer must record the executable, static arguments, working
+directory, and participation-context transport before `start-run` may use it:
+
+```sh
+$H approve-profile -workspace "$WORKSPACE" -workspace-id demo \
+  -reviewer owner -caller owner -request-id req-approve-claude-profile \
+  -profile-id approved-claude-profile \
+  -tool-executable "$CLAUDE_BIN" \
+  -tool-argv-json '["-p"]' \
+  -working-dir "$WORKSPACE" \
+  -context-transport context-file
+```
+
+Following this guide exactly, the receipt is:
+
+```text
+harnessing approve-profile: OK (request req-approve-claude-profile, workspace revision 15)
+```
+
+The `-reviewer owner` flag is required: profile approval is a human decision.
+`context-file` tells the process supervisor to write the run's workspace, task,
+agent, peer, and run identifiers to a run-scoped JSON file and pass its path in
+`HARNESSING_CONTEXT_FILE`. Approval is immutable for this profile ID; changing
+the executable or approved shape requires a different profile ID.
+
+### Attempt the managed run
+
+Now run the Layer B driver:
 
 ```sh
 python3 scripts/run-agentic-cli-cycle.py \
@@ -403,29 +441,31 @@ All flags shown are required. A relative `--harnessing` path such as
 product. The report path may name a file that does not exist, but its parent
 directory must already exist.
 
-With the current shipped command, the runner performs Claude Code's version
-probe, writes the report, and prints JSON whose stable outcome is:
-
-```json
-{
-  "message": "the shipped harnessing command has no managed start-run surface; a manual shell start would not be Layer B evidence",
-  "result": "product_surface_unavailable"
-}
-```
-
-The JSON also records the exact tool version, operating system, product
-revision, descriptor digest, workspace/task/agent/profile/run identifiers, and
-planned human interventions. Paths, versions, and operating-system text vary by
-machine. The final shell line is:
+The result now depends on the installed tool's authentication and network
+environment; a completed Layer B cycle is **not** expected or claimed here. In
+the environment used to verify this guide, profile approval cleared the earlier
+`Denied: profileID has no recorded approval event` failure and the product
+reached the real Claude process. The outer execution policy then stopped the
+attempt with:
 
 ```text
-exit status: 24
+Network access to "https://api.anthropic.com:443" was blocked by policy.
 ```
 
-Exit 24 is expected today because `harnessing help` has no managed `start-run`
-surface. H101-144 is the implementation work for that missing surface. The
-runner does **not** fall back to launching Claude Code directly, because a manual
-shell launch cannot prove product-managed participation or completion.
+That policy stop terminated the wrapper before it wrote
+`claude-code-layer-b.json` or returned a runner result and exit code. Therefore
+this verification observed **no runner result and no exit code to quote**. A
+subsequent read showed `run-1` persisted as `Starting`; that is not
+participation, completion, or a successful Layer B trial. Preserve the output
+and workspace for diagnosis rather than retrying or describing the run as
+successful.
+
+On another machine, authentication or network behavior may produce a different
+typed runner result. Whatever it returns, the JSON report records the exact tool
+version, operating system, product revision, descriptor digest,
+workspace/task/agent/profile/run identifiers, planned interventions, and
+diagnostics. Do not replace that observed result with the outcome from this
+guide.
 
 The other version-2 descriptors are explicit owner deferrals:
 
@@ -445,7 +485,9 @@ Everything is below the directory passed to `-workspace`:
 
 ```text
 getting-started.<random>/
-├── claude-code-layer-b.json
+├── claude-code-layer-b.json       # only when the runner returns normally
+├── runs/
+│   └── run-1.context.json         # after managed start reaches dispatch
 ├── state.json
 └── mailbox/
     └── agent-two/
@@ -457,9 +499,13 @@ getting-started.<random>/
 - `state.json` holds the workspace snapshot and request receipts used for
   idempotent replay. It includes tasks, results, registered identities, messages,
   delivery facts, and acknowledgements. Use the CLI rather than editing it.
-- `claude-code-layer-b.json` is the Layer B preflight report from step 9. It is
-  evidence about the attempted trial, not proof that an agent participated or
-  completed work.
+- `claude-code-layer-b.json`, when present, is the Layer B preflight report from
+  step 9. It is evidence about the attempted trial, not proof that an agent
+  participated or completed work. An outer policy may terminate the wrapper
+  before this file is written.
+- `runs/run-1.context.json` is the narrow participation context written when a
+  `context-file` profile reaches dispatch. Its presence does not prove that the
+  tool read it or performed work.
 - `mailbox/<recipient>/inbox/` is the local delivery queue. A processed envelope
   moves to `archive/`; it can move too quickly to observe in `inbox/` during this
   walkthrough.
