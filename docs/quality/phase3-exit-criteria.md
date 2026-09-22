@@ -417,11 +417,18 @@ H101-184 B1–B4 + B5′, S2–S6 + S9). Layer A + reconcile expectation updates
 
 ### H101-189 — Item 4 D4 acceptance spec (2026-09-22)
 
-D4 engineering blocked until this spec lands. **Output-gap honesty** — behaviour
-decided in h101-128 lines 73/79; minimal journal + output read slice required.
-Producer: **D2 participate + pid sync** + fixture stdout lines (not
-`block_after_marker`). One card unless Stanley blocks journal under item 4. Full
-spec: [`h101-189-item4-d4-acceptance-spec.md`](h101-189-item4-d4-acceptance-spec.md).
+**Output-gap honesty** — behaviour decided in h101-128 lines 73/79; minimal journal
++ output read slice. Producer: **D2 participate + pid sync** + fixture stdout lines.
+Full spec: [`h101-189-item4-d4-acceptance-spec.md`](h101-189-item4-d4-acceptance-spec.md).
+Architecture gate: [`h101-190-d4-journal-boundary.md`](../architecture/h101-190-d4-journal-boundary.md).
+
+### H101-192 — Item 4 D4 discharged; item 4 exit (2026-09-22)
+
+**D4 SATISFIED** at `b7d1131` (`TestCLI_RunOutputCrashPrefixIsHonest`, H101-189
+C1–C5, G2–G6 + G9). H101-190 boundary respected. **PHASE 3 ITEM 4: SATISFIED WITH
+LIMIT** — D1 partial (agent-scoped refuse only). R8 CI-only until both targets green
+on `b7d1131`. Ruling:
+[`h101-192-phase3-item4-d4-discharge-ruling.md`](h101-192-phase3-item4-d4-discharge-ruling.md).
 
 ---
 
