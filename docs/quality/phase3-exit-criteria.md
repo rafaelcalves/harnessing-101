@@ -424,11 +424,16 @@ Architecture gate: [`h101-190-d4-journal-boundary.md`](../architecture/h101-190-
 
 ### H101-192 — Item 4 D4 discharged; item 4 exit (2026-09-22)
 
-**D4 SATISFIED** at `b7d1131` (`TestCLI_RunOutputCrashPrefixIsHonest`, H101-189
-C1–C5, G2–G6 + G9). H101-190 boundary respected. **PHASE 3 ITEM 4: SATISFIED WITH
-LIMIT** — D1 partial (agent-scoped refuse only). R8 CI-only until both targets green
-on `b7d1131`. Ruling:
+**D4 SATISFIED** at `b7d1131`. **PHASE 3 ITEM 4: SATISFIED WITH LIMIT** — D1
+evidence-scope limit only (see H101-193 D1 note: not a latent defect). Ruling:
 [`h101-192-phase3-item4-d4-discharge-ruling.md`](h101-192-phase3-item4-d4-discharge-ruling.md).
+
+### H101-193 — Item 5 acceptance spec (2026-09-22)
+
+Item 5 engineering blocked until this spec lands. Beyond D4: graceful **complete**
+capture, stdout+stderr channels, offset resume, UI-08 separation, real-not-fake CLI
+proof. Producer: `emit_both_channels_then_exit` participate mode. Full spec:
+[`h101-193-item5-acceptance-spec.md`](h101-193-item5-acceptance-spec.md).
 
 ---
 
