@@ -71,6 +71,12 @@ func runFixtureParticipate(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	_, _ = fmt.Fprintln(stdout, "harnessing fixture: participated")
+	if syncPath := os.Getenv("HARNESSING_FIXTURE_SYNC_FILE"); syncPath != "" {
+		if err := os.WriteFile(syncPath, []byte(fmt.Sprintf("participated\npid=%d\n", os.Getpid())), 0o600); err != nil {
+			_, _ = fmt.Fprintln(stderr, "harnessing fixture: writing sync file: "+err.Error())
+			return 1
+		}
+	}
 
 	sleep := 3 * time.Second
 	if raw := os.Getenv("HARNESSING_FIXTURE_SLEEP_MS"); raw != "" {

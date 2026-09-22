@@ -41,9 +41,10 @@ func runCLIWithEnv(t *testing.T, binary string, env []string, args ...string) sp
 // semantics for state, actually spawns a PARTICIPATING fixture — not a
 // sleep/cat stand-in (D9) — that reads injected task/workspace context
 // (R2) and leaves an observable participation marker this test asserts
-// on directly, then proves the run reaches Starting->Running (D2)
-// through `harnessing run`, the product surface, not an internal store
-// dump (D6).
+// on directly, then proves start-run records a successful launch before a
+// fresh `harnessing run` conservatively reconciles inherited Running to
+// RecoveryRequired (H101-187); the read is through the product surface, not
+// an internal store dump (D6).
 func TestCLI_StartRun_LayerAParticipationFixture(t *testing.T) {
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		t.Skip("workspace operation is Unsupported on this platform")
@@ -83,8 +84,8 @@ func TestCLI_StartRun_LayerAParticipationFixture(t *testing.T) {
 	}
 
 	runResult := succeed("run", "-workspace", dir, "-workspace-id", wsID, "run-1")
-	if !strings.Contains(runResult.stdout, "State:      Running") {
-		t.Fatalf("harnessing run output = %q, want State: Running", runResult.stdout)
+	if !strings.Contains(runResult.stdout, "State:      RecoveryRequired") {
+		t.Fatalf("harnessing run output = %q, want conservative RecoveryRequired after fresh reopen", runResult.stdout)
 	}
 
 	// R2: the fixture actually received and echoed the injected context

@@ -1063,18 +1063,16 @@ func findActiveRunForAgent(snap *domain.Snapshot, agentID domain.AgentID) (domai
 	return "", false
 }
 
-// ReconcileStuckRuns is item 4's minimal crash-reconciliation slice
-// (H101-170, H101-169 ruling). Call exactly once, right after this
-// host acquires the workspace lock (host.Open), before this session
-// admits any StartRun: Step 3/4 of StartRun always resolve a run out
-// of Starting within ONE synchronous call, so a run still Starting
-// when observed by a DIFFERENT session can only mean its controller
-// exited before finishing that call — the real occurrence behind
-// H101-161. No PID or identity probing is needed to know this, and
-// this slice deliberately performs none (boundaries.md: a reused PID
-// alone is insufficient). Calling this again later in the SAME
-// session would wrongly reconcile that session's own in-flight Start
-// calls; only host.Open calls it, and only once.
+// ReconcileStuckRuns is item 4's crash-reconciliation pass (H101-170,
+// H101-185). Call exactly once, right after this host acquires the workspace
+// lock (host.Open), before this session admits any StartRun. Starting and
+// Running are both nonterminal states: a controller can die before the
+// Starting observation, or after it recorded Running while its detached child
+// later died. No PID or identity probing is needed to know that ownership or
+// outcome is not established, and this pass deliberately performs none
+// (boundaries.md: a reused PID alone is insufficient). Calling this again
+// later in the SAME session would wrongly reconcile that session's own
+// in-flight Start calls; only host.Open calls it, and only once.
 func (e *Engine) ReconcileStuckRuns(ctx context.Context) error {
 	snap, err := e.store.Load(ctx, e.workspaceID)
 	if err != nil {
@@ -1092,7 +1090,7 @@ func (e *Engine) ReconcileStuckRuns(ctx context.Context) error {
 		return nil
 	}
 	for _, run := range snap.Runs {
-		if run.State != domain.RunStarting {
+		if run.State != domain.RunStarting && run.State != domain.RunRunning {
 			continue
 		}
 		if err := e.reconcileStuckRun(ctx, run.ID); err != nil {
@@ -1103,7 +1101,7 @@ func (e *Engine) ReconcileStuckRuns(ctx context.Context) error {
 }
 
 // reconcileStuckRun commits the one honest fact this slice can
-// assert: ownership/outcome of a Starting run is Unknown. Unknown is
+// assert: ownership/outcome of a nonterminal run is Unknown. Unknown is
 // a structured outcome (domain.ErrRecoveryRequired from Recover),
 // never nil success, parsed prose, or an ignored Unsupported — the
 // core, not the adapter, durably maps it onto the run's own state.
@@ -1130,7 +1128,7 @@ func (e *Engine) reconcileStuckRun(ctx context.Context, runID domain.RunID) erro
 	fp := fingerprint("RunReconcile", string(runID))
 	_, err = e.commit(ctx, CallerScope{}, domain.RequestID(outcomeID), fp, func(snap *domain.Snapshot) ([]domain.Event, error) {
 		idx, run, found := findRun(snap, runID)
-		if !found || run.State != domain.RunStarting {
+		if !found || (run.State != domain.RunStarting && run.State != domain.RunRunning) {
 			// Already resolved by the time this commit runs — no-op,
 			// not an error.
 			return nil, nil

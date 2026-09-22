@@ -82,11 +82,10 @@ func TestReconcileStuckRuns_TransitionsStuckStartingToRecoveryRequired(t *testin
 	}
 }
 
-// TestReconcileStuckRuns_LeavesAnUnrelatedRunsOperationAlone proves
-// ReconcileStuckRuns's per-run commit only ever touches the ONE run
-// (and its start operation) it found genuinely Starting — an unrelated
-// agent's already-Succeeded run/operation survives a reconcile pass
-// untouched. This does NOT exercise reconcileStuckRun's own
+// TestReconcileStuckRuns_PreservesRunningOperationOutcome proves
+// ReconcileStuckRuns preserves the already-Succeeded start operation while
+// conservatively reconciling an inherited Running run to RecoveryRequired.
+// This does NOT exercise reconcileStuckRun's own
 // found-but-not-Pending/Running guard on the SAME run's operation: that
 // guard is defensive against a combination (Run.State == Starting
 // while its own start Operation is already terminal) that cannot
@@ -94,7 +93,7 @@ func TestReconcileStuckRuns_TransitionsStuckStartingToRecoveryRequired(t *testin
 // its start operation's state together — never independently. Recorded
 // here rather than left implicit: the guard's own test would be
 // vacuous, so this asserts the weaker, real claim instead.
-func TestReconcileStuckRuns_LeavesAnUnrelatedRunsOperationAlone(t *testing.T) {
+func TestReconcileStuckRuns_PreservesRunningOperationOutcome(t *testing.T) {
 	sup := &fakeSupervisor{}
 	e := newStartRunEngine(t, sup)
 	ctx := context.Background()
@@ -106,8 +105,8 @@ func TestReconcileStuckRuns_LeavesAnUnrelatedRunsOperationAlone(t *testing.T) {
 		t.Fatalf("StartRun agent-done: %v", err)
 	}
 
-	// A second, unrelated agent gets stuck Starting via the same
-	// crash-simulation technique.
+	// A second agent gets stuck Starting via the same crash-simulation
+	// technique; both nonterminal runs are reconciled in one fresh pass.
 	mustRegisterAndApprove(t, ctx, e, "agent-stuck", "profile-a")
 	orig := afterDispatchMarkerBeforeStart
 	afterDispatchMarkerBeforeStart = func() { panic("simulated crash between marker and Start") }
@@ -127,15 +126,15 @@ func TestReconcileStuckRuns_LeavesAnUnrelatedRunsOperationAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetRun run-done: %v", err)
 	}
-	if doneRun.State != domain.RunRunning {
-		t.Fatalf("run-done.State = %q after an unrelated reconcile pass, want it to stay Running", doneRun.State)
+	if doneRun.State != domain.RunRecoveryRequired {
+		t.Fatalf("run-done.State = %q after reconcile, want RecoveryRequired", doneRun.State)
 	}
 	doneOp, err := e.GetOperation(ctx, domain.OperationID("run-done-start"))
 	if err != nil {
 		t.Fatalf("GetOperation run-done: %v", err)
 	}
 	if doneOp.State != domain.OperationSucceeded {
-		t.Fatalf("run-done's start operation.State = %q after an unrelated reconcile pass, want it to stay Succeeded", doneOp.State)
+		t.Fatalf("run-done's start operation.State = %q after reconcile, want it to stay Succeeded", doneOp.State)
 	}
 
 	stuckOp, err := e.GetOperation(ctx, domain.OperationID("run-stuck-start"))
