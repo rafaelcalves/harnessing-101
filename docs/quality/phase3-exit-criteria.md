@@ -233,6 +233,17 @@ the path to close that slot; Kelly does not rule it here.
 | R3/D10 CI negatives | **SATISFIED** | `TestCLI_StartRun_MissingToolIsHonestNotRunning`, `TestCLI_StartRun_AuthRequiredFixtureEndsExitedNotRunning`, `TestCLI_StartRun_UnsupportedContextTransportEndsExitedNotRunning` (`5048489`); engine `TestStartRun_SupervisorFailureRecordsExitedHonestly` — PASS |
 | Layer B Claude | **NOT SATISFIED** | GETTING-STARTED §9: network policy blocked before runner wrote a report; no `cycle_completed` manifest. D14/D15 runner exists; evidence file absent |
 
+### H101-172 — Registered external session vs item 1 Layer B (2026-09-22)
+
+**Ruling:** owner H101-163 registration shape **does not discharge** item 1 Layer
+B. Pre-existing user-started sessions are **outside** D13–D15 managed-`StartRun`
+evidence (D13 forbids claiming Layer B from manual/spike start). **Recommend new
+exit item** for registered-session participation; **do not amend** item 1 Layer B
+to absorb registration. Claude Layer B still closable via managed-`StartRun`
+runner manifest or descriptor deferral only. Evidence bar for registration:
+provisional pending Stanley H101-171. Full ruling:
+[`h101-172-layerb-registration-ruling.md`](h101-172-layerb-registration-ruling.md).
+
 ### H101-153 Layer B refinements (2026-09-21)
 
 **Refinement 1:** runner script **required**; manifest is runner output only.
