@@ -33,9 +33,11 @@ package host
 
 import (
 	"context"
+	"path/filepath"
 
 	"github.com/rafaelcalves/harnessing-101/internal/adapters/clock"
 	"github.com/rafaelcalves/harnessing-101/internal/adapters/idsource"
+	"github.com/rafaelcalves/harnessing-101/internal/adapters/process"
 	"github.com/rafaelcalves/harnessing-101/internal/adapters/statestore"
 	"github.com/rafaelcalves/harnessing-101/internal/api"
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
@@ -57,6 +59,8 @@ type Capabilities interface {
 	RejectTaskResult(ctx context.Context, callerAgentID domain.AgentID, req task.RejectTaskResultRequest) (domain.Receipt, error)
 	SendMessage(ctx context.Context, callerAgentID domain.AgentID, req task.SendMessageRequest) (domain.Receipt, error)
 	AcknowledgeMessage(ctx context.Context, callerAgentID domain.AgentID, req task.AcknowledgeMessageRequest) (domain.Receipt, error)
+	ApproveProfile(ctx context.Context, callerAgentID domain.AgentID, req task.ApproveProfileRequest) (domain.Receipt, error)
+	StartRun(ctx context.Context, callerAgentID domain.AgentID, req task.StartRunRequest) (domain.Receipt, error)
 
 	// Delivery facts the mailbox adapter would record. The engine itself
 	// treats these as unauthenticated host facts (CallerScope{} today,
@@ -71,6 +75,7 @@ type Capabilities interface {
 	GetTask(ctx context.Context, taskID domain.TaskID) (domain.Task, error)
 	GetMessage(ctx context.Context, messageID domain.MessageID) (domain.Message, error)
 	GetAgent(ctx context.Context, agentID domain.AgentID) (domain.Agent, error)
+	GetRun(ctx context.Context, runID domain.RunID) (domain.Run, error)
 	GetSnapshot(ctx context.Context) (domain.Snapshot, error)
 
 	// ResolveRequest is ADR 0004's caller-bound resolution operation
@@ -120,6 +125,7 @@ func Open(root string, workspaceID domain.WorkspaceID, reviewerAgentIDs []domain
 		return nil, err
 	}
 	engine := task.NewEngine(store, clock.NewSystem(), idsource.Random{}, workspaceID)
+	engine.SetProcessSupervisor(&process.Supervisor{ContextDir: filepath.Join(root, "runs")})
 
 	reviewers := make(map[domain.AgentID]bool, len(reviewerAgentIDs))
 	for _, id := range reviewerAgentIDs {
@@ -171,6 +177,14 @@ func (w *workspace) AcknowledgeMessage(ctx context.Context, callerAgentID domain
 	return w.engine.AcknowledgeMessage(ctx, w.caller(callerAgentID), req)
 }
 
+func (w *workspace) ApproveProfile(ctx context.Context, callerAgentID domain.AgentID, req task.ApproveProfileRequest) (domain.Receipt, error) {
+	return w.engine.ApproveProfile(ctx, w.caller(callerAgentID), req)
+}
+
+func (w *workspace) StartRun(ctx context.Context, callerAgentID domain.AgentID, req task.StartRunRequest) (domain.Receipt, error) {
+	return w.engine.StartRun(ctx, w.caller(callerAgentID), req)
+}
+
 func (w *workspace) RecordMessagePublished(ctx context.Context, req task.MessageDeliveryRequest) (domain.Receipt, error) {
 	return w.engine.RecordMessagePublished(ctx, req)
 }
@@ -201,6 +215,10 @@ func (w *workspace) GetAgent(ctx context.Context, agentID domain.AgentID) (domai
 		return domain.Agent{}, err
 	}
 	return cloneAgent(a), nil
+}
+
+func (w *workspace) GetRun(ctx context.Context, runID domain.RunID) (domain.Run, error) {
+	return w.engine.GetRun(ctx, runID)
 }
 
 func (w *workspace) GetSnapshot(ctx context.Context) (domain.Snapshot, error) {
@@ -261,8 +279,12 @@ func (s *frontendSession) AcknowledgeMessage(ctx context.Context, req task.Ackno
 	return s.caps.AcknowledgeMessage(ctx, s.caller, req)
 }
 
-func (s *frontendSession) StartRun(context.Context, api.StartRunRequest) (domain.Receipt, error) {
-	return domain.Receipt{}, unsupportedPhase3("StartRun")
+func (s *frontendSession) ApproveProfile(ctx context.Context, req api.ApproveProfileRequest) (domain.Receipt, error) {
+	return s.caps.ApproveProfile(ctx, s.caller, req)
+}
+
+func (s *frontendSession) StartRun(ctx context.Context, req api.StartRunRequest) (domain.Receipt, error) {
+	return s.caps.StartRun(ctx, s.caller, req)
 }
 
 func (s *frontendSession) StopRun(context.Context, api.StopRunRequest) (domain.Receipt, error) {
@@ -284,6 +306,9 @@ func (s *frontendSession) GetTask(ctx context.Context, id domain.TaskID) (domain
 }
 func (s *frontendSession) GetMessage(ctx context.Context, id domain.MessageID) (domain.Message, error) {
 	return s.caps.GetMessage(ctx, id)
+}
+func (s *frontendSession) GetRun(ctx context.Context, id domain.RunID) (domain.Run, error) {
+	return s.caps.GetRun(ctx, id)
 }
 func (s *frontendSession) GetSnapshot(ctx context.Context) (domain.Snapshot, error) {
 	return s.caps.GetSnapshot(ctx)

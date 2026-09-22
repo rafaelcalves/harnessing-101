@@ -39,6 +39,9 @@ func (fakeSession) SendMessage(context.Context, api.SendMessageRequest) (domain.
 func (fakeSession) AcknowledgeMessage(context.Context, api.AcknowledgeMessageRequest) (domain.Receipt, error) {
 	return domain.Receipt{}, unsupported()
 }
+func (fakeSession) ApproveProfile(context.Context, api.ApproveProfileRequest) (domain.Receipt, error) {
+	return domain.Receipt{}, unsupported()
+}
 func (fakeSession) StartRun(context.Context, api.StartRunRequest) (domain.Receipt, error) {
 	return domain.Receipt{}, unsupported()
 }
@@ -56,6 +59,9 @@ func (fakeSession) GetTask(context.Context, domain.TaskID) (domain.Task, error) 
 }
 func (fakeSession) GetMessage(context.Context, domain.MessageID) (domain.Message, error) {
 	return domain.Message{}, unsupported()
+}
+func (fakeSession) GetRun(context.Context, domain.RunID) (domain.Run, error) {
+	return domain.Run{}, unsupported()
 }
 func (fakeSession) GetSnapshot(context.Context) (domain.Snapshot, error) {
 	return domain.Snapshot{}, unsupported()

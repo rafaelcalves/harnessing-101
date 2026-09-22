@@ -87,6 +87,12 @@ func dispatch(ctx context.Context, session api.FrontendSession, envelope Envelop
 			return nil, err
 		}
 		return session.AcknowledgeMessage(ctx, req)
+	case "ApproveProfile":
+		var req api.ApproveProfileRequest
+		if err := decode(&req); err != nil {
+			return nil, err
+		}
+		return session.ApproveProfile(ctx, req)
 	case "StartRun":
 		var req api.StartRunRequest
 		if err := decode(&req); err != nil {
@@ -129,6 +135,14 @@ func dispatch(ctx context.Context, session api.FrontendSession, envelope Envelop
 			return nil, err
 		}
 		return session.GetMessage(ctx, req.MessageID)
+	case "GetRun":
+		var req struct {
+			RunID domain.RunID `json:"runID"`
+		}
+		if err := decode(&req); err != nil {
+			return nil, err
+		}
+		return session.GetRun(ctx, req.RunID)
 	case "GetSnapshot":
 		return session.GetSnapshot(ctx)
 	case "ResolveRequest":

@@ -9,12 +9,15 @@ import (
 )
 
 func TestFrontendSession_Phase3OperationsAreUnsupported(t *testing.T) {
+	// StartRun moved off this list in H101-144 (Phase 3 item 1): it is a
+	// real command now, not an Unsupported stub — see
+	// TestFrontendSession_StartRun* in start_run_test.go. StopRun and
+	// SetRunBudget remain items 2/3's scope.
 	session := &frontendSession{}
 	tests := []struct {
 		name string
 		call func() error
 	}{
-		{name: "StartRun", call: func() error { _, err := session.StartRun(context.Background(), api.StartRunRequest{}); return err }},
 		{name: "StopRun", call: func() error { _, err := session.StopRun(context.Background(), api.StopRunRequest{}); return err }},
 		{name: "SetRunBudget", call: func() error {
 			_, err := session.SetRunBudget(context.Background(), api.SetRunBudgetRequest{})

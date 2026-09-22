@@ -66,7 +66,7 @@ func errorResponse(err error, mutation bool) *ErrorInfo {
 
 func isMutation(operation string) bool {
 	switch operation {
-	case "register", "update", "create", "transition", "report", "accept", "reject", "send", "ack", "start-run", "stop-run", "set-run-budget":
+	case "register", "update", "create", "transition", "report", "accept", "reject", "send", "ack", "approve-profile", "start-run", "stop-run", "set-run-budget":
 		return true
 	default:
 		return false
@@ -139,6 +139,12 @@ func (a *Adapter) dispatch(ctx context.Context, envelope Envelope) (interface{},
 			return nil, invalidPayload()
 		}
 		return a.session.AcknowledgeMessage(ctx, req)
+	case "approve-profile":
+		var req api.ApproveProfileRequest
+		if err := decode(&req); err != nil {
+			return nil, invalidPayload()
+		}
+		return a.session.ApproveProfile(ctx, req)
 	case "start-run":
 		var req api.StartRunRequest
 		if err := decode(&req); err != nil {
@@ -181,6 +187,14 @@ func (a *Adapter) dispatch(ctx context.Context, envelope Envelope) (interface{},
 			return nil, invalidPayload()
 		}
 		return a.session.GetMessage(ctx, req.MessageID)
+	case "run":
+		var req struct {
+			RunID domain.RunID `json:"runID"`
+		}
+		if err := decode(&req); err != nil {
+			return nil, invalidPayload()
+		}
+		return a.session.GetRun(ctx, req.RunID)
 	case "snapshot":
 		return a.session.GetSnapshot(ctx)
 	case "resolve":

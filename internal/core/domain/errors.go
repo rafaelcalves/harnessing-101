@@ -15,6 +15,15 @@ const (
 	ErrCursorExpired    ErrorCode = "CursorExpired"
 	ErrRecoveryRequired ErrorCode = "RecoveryRequired"
 
+	// Phase 3 item 1's R3 honest-failure-mode classification (H101-147/
+	// H101-152). ErrUnsupported doubles as "unsupported invocation
+	// mode" — no separate code needed, since it is already the stable
+	// vocabulary for "this exists but isn't offered here."
+	ErrMissingTool            ErrorCode = "MissingTool"
+	ErrAuthenticationRequired ErrorCode = "AuthenticationRequired"
+	ErrNetworkEgressRefused   ErrorCode = "NetworkEgressRefused"
+	ErrSpawnFailed            ErrorCode = "SpawnFailed"
+
 	// ErrOutcomeUncertain is ADR 0004's stable code for a mutating
 	// operation whose confirmed outcome cannot be reported: not a
 	// rollback signal, not a successful receipt. Callers branch on this

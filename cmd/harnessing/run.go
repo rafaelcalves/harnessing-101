@@ -23,6 +23,9 @@ Usage:
   harnessing reject       -workspace <dir> -reviewer <id>... -caller <id> -request-id <id> -task <id> -result <id> -expected-revision <n> -reason <text>
   harnessing send         -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -message <id> -recipient <id> -kind <Request|Inform|Result> -body <text> [-sender <id>] [-task <id>] [-reply-to <id>]
   harnessing ack          -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -message <id>
+  harnessing approve-profile -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -profile-id <id> -tool-executable <path> [-tool-argv-json <json>]
+  harnessing start-run    -workspace <dir> [-workspace-id <id>] [-caller <id>] [-request-id <id>] -run <id> -agent <id> -profile-id <id> [-task <id>] [-tool-executable <path>] [-tool-argv-json <json>]
+  harnessing run          -workspace <dir> [-workspace-id <id>] <runID>
 
 Every command other than version opens a workspace through the trusted
 composition root and receives a caller-bound frontend session; there is no
@@ -81,6 +84,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runSend(args[1:], stdout, stderr)
 	case "ack":
 		return runAck(args[1:], stdout, stderr)
+	case "approve-profile":
+		return runApproveProfile(args[1:], stdout, stderr)
+	case "start-run":
+		return runStartRun(args[1:], stdout, stderr)
+	case "run":
+		return runRunQuery(args[1:], stdout, stderr)
+	case "__fixture-participate":
+		// H101-144's Layer A CI participation fixture — see
+		// fixture_participate.go's doc comment. Deliberately unlisted
+		// in usage: it is a test double invoked as an approved
+		// profile's executable, never a user-facing command.
+		return runFixtureParticipate(args[1:], stdout, stderr)
 	case "help", "-h", "--help":
 		_, _ = fmt.Fprint(stdout, usage)
 		return 0

@@ -17,6 +17,11 @@ func TestUI08_DetachedViewMutationProbe(t *testing.T) {
 	harnessDetachedSnapshotProbe(t, env)
 }
 
+// TestUI08_Phase3OperationsUnsupported covers StopRun/SetRunBudget only
+// (items 2/3). StartRun moved off this row in H101-144 (Phase 3 item 1):
+// it is UI-13's real-command case now, not UI-08's Unsupported case —
+// see cmd/harnessing's TestCLI_StartRun_* and
+// internal/core/task's TestStartRun_* for its actual contract.
 func TestUI08_Phase3OperationsUnsupported(t *testing.T) {
 	ctx := context.Background()
 	ops := []struct {
@@ -24,7 +29,6 @@ func TestUI08_Phase3OperationsUnsupported(t *testing.T) {
 		op   string
 		body map[string]string
 	}{
-		{name: "StartRun", op: "start-run", body: map[string]string{"RequestID": "ui08-sr", "RunID": "run1"}},
 		{name: "StopRun", op: "stop-run", body: map[string]string{"RequestID": "ui08-st", "RunID": "run1"}},
 		{name: "SetRunBudget", op: "set-run-budget", body: map[string]string{"RequestID": "ui08-bu", "RunID": "run1", "Budget": "1"}},
 	}

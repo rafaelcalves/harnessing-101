@@ -238,15 +238,81 @@ type Snapshot struct {
 	Tasks       []Task
 	TaskResults []TaskResult
 	Messages    []Message
+	Profiles    []Profile
+	Runs        []Run
 }
 
 // ExecutionSpec describes a local process an adapter may start. Resolving
 // paths, environment, descriptors, signals, and process groups is adapter
 // work; the core never inspects a process ID. See boundaries.md,
 // "supervision and recovery".
+//
+// ContextTransport is Phase 3 item 1's R2 (participation context)
+// mechanism: how task/workspace identifiers reach the launched tool.
+// Only "context-file" is implemented by internal/adapters/process today
+// (R2's "documented protocol handoff"); any other transport value a
+// profile names is honored as a stable, explicit Unsupported at Start
+// rather than silently ignored (R3) — see process.Supervisor.Start's
+// doc comment. Empty ContextTransport means the profile carries no
+// participation context at all (a plain spawn — never used for a real
+// managed-agent-tool claim, only for fixtures that do not need one).
 type ExecutionSpec struct {
 	ProfileID        string
 	Args             []string
 	WorkingDirectory string
 	EnvironmentRefs  []string
+	ContextTransport string
+}
+
+// RunParticipationContext is what StartRun hands the supervisor about
+// THIS run specifically — distinct from ExecutionSpec, which is the
+// PROFILE's own fixed, approved shape. Only the identifiers named here
+// ever reach a launched tool via ContextTransport; there is no path for
+// arbitrary request-supplied text to ride along as "context."
+type RunParticipationContext struct {
+	WorkspaceID WorkspaceID
+	RunID       RunID
+	AgentID     AgentID
+	TaskID      *TaskID
+	PeerAgentID *AgentID
+}
+
+// Profile is a host-recorded approval of one local execution profile
+// (threat-model rule 5): ProcessSupervisor.Start — and this product's
+// StartRun — rejects any spec whose ProfileID lacks a prior recorded
+// approval event here. Approval fixes the executable, args, and
+// environment; StartRun never accepts ad hoc argv. There is no update
+// path in this slice: approving an already-approved ProfileID is
+// Conflict, not a silent revision bump (CF3 — no retroactive change to
+// what was approved).
+type Profile struct {
+	ProfileID  string
+	Spec       ExecutionSpec
+	Provenance Provenance
+}
+
+// Run is one StartRun/StopRun lifecycle record (boundaries.md
+// "supervision and recovery"; H101-135/H101-128's dispatch-ordering
+// invariant). DispatchAttemptedAt is committed durably BEFORE
+// ProcessSupervisor.Start is ever invoked for this run, and confirmed
+// durable before that call — the marker H101-135 requires. A run
+// observed with DispatchAttemptedAt set but StartedAt still nil, and no
+// recorded exit, is the invariant's named ambiguous state: this product
+// never automatically redispatches it; only explicit recovery (item 4)
+// resolves it later. ExitReason, when set, uses one of the H101-152
+// classification names (missing_tool, authentication_required,
+// network_egress_refused, unsupported_invocation, spawn_failed) or
+// "stopped" — never a raw error string a caller would have to parse to
+// find the taxonomy.
+type Run struct {
+	ID                  RunID
+	AgentID             AgentID
+	ProfileID           string
+	State               RunState
+	Revision            uint64
+	Provenance          Provenance
+	DispatchAttemptedAt *time.Time
+	StartedAt           *time.Time
+	ExitedAt            *time.Time
+	ExitReason          string
 }

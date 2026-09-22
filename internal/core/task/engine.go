@@ -56,6 +56,14 @@ type Engine struct {
 	workspaceID domain.WorkspaceID
 	events      *eventBus
 	commitMu    sync.Mutex
+	supervisor  ports.ProcessSupervisor
+}
+
+// SetProcessSupervisor wires this engine's Phase 3 ProcessSupervisor.
+// StartRun without one configured returns Unsupported — an honest
+// "not configured for this host" rather than a nil-pointer panic.
+func (e *Engine) SetProcessSupervisor(supervisor ports.ProcessSupervisor) {
+	e.supervisor = supervisor
 }
 
 // afterStoreCommitBeforePublish is a package-level test seam (same
@@ -432,6 +440,26 @@ func cloneSnapshot(snap domain.Snapshot) domain.Snapshot {
 			out.Messages[i].AcknowledgedAt = &v
 		}
 	}
+	out.Profiles = append([]domain.Profile{}, snap.Profiles...)
+	for i := range out.Profiles {
+		out.Profiles[i].Spec.Args = append([]string{}, snap.Profiles[i].Spec.Args...)
+		out.Profiles[i].Spec.EnvironmentRefs = append([]string{}, snap.Profiles[i].Spec.EnvironmentRefs...)
+	}
+	out.Runs = append([]domain.Run{}, snap.Runs...)
+	for i := range out.Runs {
+		if snap.Runs[i].DispatchAttemptedAt != nil {
+			v := *snap.Runs[i].DispatchAttemptedAt
+			out.Runs[i].DispatchAttemptedAt = &v
+		}
+		if snap.Runs[i].StartedAt != nil {
+			v := *snap.Runs[i].StartedAt
+			out.Runs[i].StartedAt = &v
+		}
+		if snap.Runs[i].ExitedAt != nil {
+			v := *snap.Runs[i].ExitedAt
+			out.Runs[i].ExitedAt = &v
+		}
+	}
 	return out
 }
 
@@ -666,6 +694,272 @@ func (e *Engine) AcknowledgeMessage(ctx context.Context, caller CallerScope, req
 		}
 		return []domain.Event{ev}, nil
 	})
+}
+
+// ApproveProfileRequest is the host-established human decision that
+// makes a profileID eligible for StartRun.
+type ApproveProfileRequest = api.ApproveProfileRequest
+
+func (e *Engine) ApproveProfile(ctx context.Context, caller CallerScope, req ApproveProfileRequest) (domain.Receipt, error) {
+	if !caller.IsHumanReviewer {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrDenied, Detail: "approving a profile requires an authorized human reviewer"}
+	}
+	if req.ProfileID == "" {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "profileID must not be empty"}
+	}
+	if len(req.Spec.Args) == 0 {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "spec.Args must name at least the executable"}
+	}
+
+	fp := fingerprint("ApproveProfile", req.ProfileID, req.Spec)
+	return e.commit(ctx, caller, req.RequestID, fp, func(snap *domain.Snapshot) ([]domain.Event, error) {
+		if _, found := findProfile(snap, req.ProfileID); found {
+			return nil, &domain.Error{Code: domain.ErrConflict, Detail: "profileID already approved"}
+		}
+		now := e.clock.WallNow()
+		spec := req.Spec
+		spec.ProfileID = req.ProfileID
+		snap.Profiles = append(snap.Profiles, domain.Profile{
+			ProfileID:  req.ProfileID,
+			Spec:       spec,
+			Provenance: e.claimedProvenance(caller, now),
+		})
+		ev, err := e.event(ctx, "ProfileApproved", now, req.ProfileID)
+		if err != nil {
+			return nil, err
+		}
+		return []domain.Event{ev}, nil
+	})
+}
+
+// afterDispatchMarkerBeforeStart is a package-level test seam (same
+// pattern as afterStoreCommitBeforePublish): a no-op in production,
+// swapped by a white-box test to simulate this whole process crashing
+// in exactly the window H101-135/H101-128 name ambiguous — after the
+// dispatch-attempted marker committed durably, before
+// ProcessSupervisor.Start is ever called. A test that panics here,
+// recovers, then opens a FRESH Engine against the same store proves
+// StartRun refuses to auto-redispatch that run, rather than relying on
+// a race that might never fire.
+var afterDispatchMarkerBeforeStart = func() {}
+
+// StartRunRequest is version 1's StartRun payload.
+type StartRunRequest = api.StartRunRequest
+
+// StartRun implements H101-135/H101-128's numbered dispatch-ordering
+// invariant as three separate, durably-confirmed commits around exactly
+// one ProcessSupervisor.Start call:
+//
+//  1. persist start intent (this run, Starting) — durable, receipted;
+//  2. the single dispatcher (this call, and only this call, ever calls
+//     Start for a given run) rechecks state/profile and commits the
+//     DISPATCH-ATTEMPTED MARKER before invoking the supervisor,
+//     confirming that marker's durability too;
+//  3. call Start exactly once, outside any commit callback;
+//  4. commit the observation separately from the marker and from the
+//     Start call itself.
+//
+// A crash between step 2 and step 3 leaves the run marker-committed but
+// unobserved — the invariant's named ambiguous state. This method
+// never auto-redispatches a run already in that state; only explicit
+// recovery (item 4, not this card) resolves it.
+func (e *Engine) StartRun(ctx context.Context, caller CallerScope, req StartRunRequest) (domain.Receipt, error) {
+	if req.RunID == "" || req.AgentID == "" || req.ProfileID == "" {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "runID, agentID, and profileID are required"}
+	}
+	if e.supervisor == nil {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrUnsupported, Detail: "no process supervisor is configured for this host"}
+	}
+	if req.ToolExecutable != "" && len(req.ToolArgv) == 0 {
+		// Nothing actually requires this pairing structurally, but an
+		// executable with no argv at all is never what a real agentic
+		// CLI invocation looks like — catch the likely-wrong call shape
+		// early rather than silently launching a bare binary.
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "toolExecutable requires a non-empty toolArgv"}
+	}
+
+	// Step 1 — persist start intent. CF1: authorization is `caller`
+	// (host-established scope), never req.AgentID/req.ProfileID
+	// themselves — those only select which agent/profile to check.
+	fpA := fingerprint("StartRun", req.RunID, req.AgentID, req.ProfileID, req.ToolExecutable, req.ToolArgv)
+	receipt, err := e.commit(ctx, caller, req.RequestID, fpA, func(snap *domain.Snapshot) ([]domain.Event, error) {
+		if _, _, found := findRun(snap, domain.RunID(req.RunID)); found {
+			return nil, &domain.Error{Code: domain.ErrConflict, Detail: "runID already exists"}
+		}
+		profile, found := findProfile(snap, req.ProfileID)
+		if !found {
+			// D1/R5: an installed executable on PATH is not an approved
+			// profile. This IS the approval gate threat-model rule 5
+			// requires — Denied, not silent success.
+			return nil, &domain.Error{Code: domain.ErrDenied, Detail: "profileID has no recorded approval event"}
+		}
+		if req.ToolExecutable != "" && (len(profile.Spec.Args) == 0 || req.ToolExecutable != profile.Spec.Args[0]) {
+			return nil, &domain.Error{Code: domain.ErrDenied, Detail: "toolExecutable does not match the profile's approved executable"}
+		}
+		if _, _, found := findAgent(snap, req.AgentID); !found {
+			return nil, &domain.Error{Code: domain.ErrNotFound, Detail: "agent is not registered"}
+		}
+		now := e.clock.WallNow()
+		snap.Runs = append(snap.Runs, domain.Run{
+			ID:         domain.RunID(req.RunID),
+			AgentID:    req.AgentID,
+			ProfileID:  req.ProfileID,
+			State:      domain.RunStarting,
+			Revision:   1,
+			Provenance: e.claimedProvenance(caller, now),
+		})
+		ev, err := e.event(ctx, "RunStarting", now, req.RunID)
+		if err != nil {
+			return nil, err
+		}
+		return []domain.Event{ev}, nil
+	})
+	if err != nil {
+		return receipt, err
+	}
+
+	// Step 2 — the dispatch-attempted marker, committed before Start is
+	// ever called. This commit is host-internal bookkeeping, not a
+	// second caller-facing replay slot: it uses a fresh internal
+	// request ID under CallerScope{}, the same pattern
+	// recordDeliveryFact already uses for host-authored facts.
+	var spec domain.ExecutionSpec
+	markerErr := func() error {
+		markerID, err := e.ids.NewID(ctx)
+		if err != nil {
+			return err
+		}
+		fpB := fingerprint("StartRunMarker", req.RunID)
+		_, err = e.commit(ctx, CallerScope{}, domain.RequestID(markerID), fpB, func(snap *domain.Snapshot) ([]domain.Event, error) {
+			idx, run, found := findRun(snap, domain.RunID(req.RunID))
+			if !found {
+				return nil, &domain.Error{Code: domain.ErrConflict, Detail: "run vanished between intent and dispatch"}
+			}
+			if run.DispatchAttemptedAt != nil {
+				return nil, &domain.Error{Code: domain.ErrConflict, Detail: "dispatch already attempted for this run; ambiguous outcome, will not auto-redispatch (see item 4 recovery)"}
+			}
+			if run.State != domain.RunStarting {
+				return nil, &domain.Error{Code: domain.ErrConflict, Detail: "run is no longer Starting"}
+			}
+			profile, found := findProfile(snap, run.ProfileID)
+			if !found {
+				return nil, &domain.Error{Code: domain.ErrDenied, Detail: "profileID approval no longer present"}
+			}
+			spec = profile.Spec
+			if req.ToolExecutable != "" {
+				spec.Args = append([]string{req.ToolExecutable}, req.ToolArgv...)
+			}
+
+			now := e.clock.WallNow()
+			snap.Runs[idx].DispatchAttemptedAt = &now
+			ev, err := e.event(ctx, "RunDispatchAttempted", now, req.RunID)
+			if err != nil {
+				return nil, err
+			}
+			return []domain.Event{ev}, nil
+		})
+		return err
+	}()
+	if markerErr != nil {
+		return domain.Receipt{}, markerErr
+	}
+
+	afterDispatchMarkerBeforeStart()
+
+	// Step 3 — exactly one Start call, outside any commit callback
+	// (boundaries: "keep process effects outside Commit callbacks").
+	participation := domain.RunParticipationContext{
+		WorkspaceID: e.workspaceID,
+		RunID:       domain.RunID(req.RunID),
+		AgentID:     req.AgentID,
+		TaskID:      req.TaskID,
+		PeerAgentID: req.PeerAgentID,
+	}
+	startErr := e.supervisor.Start(ctx, domain.RunID(req.RunID), spec, participation)
+
+	// Step 4 — observation, committed separately from the marker and
+	// from the Start call. A Start error is known information, not
+	// ambiguous: record it honestly (R3) rather than leaving the run
+	// Starting forever.
+	observeErr := func() error {
+		outcomeID, err := e.ids.NewID(ctx)
+		if err != nil {
+			return err
+		}
+		fpC := fingerprint("StartRunObservation", req.RunID, startErr != nil)
+		_, err = e.commit(ctx, CallerScope{}, domain.RequestID(outcomeID), fpC, func(snap *domain.Snapshot) ([]domain.Event, error) {
+			idx, _, found := findRun(snap, domain.RunID(req.RunID))
+			if !found {
+				return nil, &domain.Error{Code: domain.ErrConflict, Detail: "run vanished before observation"}
+			}
+			now := e.clock.WallNow()
+			if startErr != nil {
+				snap.Runs[idx].State = domain.RunExited
+				snap.Runs[idx].ExitedAt = &now
+				snap.Runs[idx].ExitReason = startErrorCode(startErr)
+				ev, err := e.event(ctx, "RunExited", now, req.RunID)
+				if err != nil {
+					return nil, err
+				}
+				return []domain.Event{ev}, nil
+			}
+			snap.Runs[idx].State = domain.RunRunning
+			snap.Runs[idx].StartedAt = &now
+			ev, err := e.event(ctx, "RunStarted", now, req.RunID)
+			if err != nil {
+				return nil, err
+			}
+			return []domain.Event{ev}, nil
+		})
+		return err
+	}()
+	if observeErr != nil {
+		return domain.Receipt{}, observeErr
+	}
+	if startErr != nil {
+		return domain.Receipt{}, startErr
+	}
+	return receipt, nil
+}
+
+func startErrorCode(err error) string {
+	var derr *domain.Error
+	if de, ok := err.(*domain.Error); ok {
+		derr = de
+		return string(derr.Code)
+	}
+	return string(domain.ErrSpawnFailed)
+}
+
+// GetRun is a read, not a command: no receipt, no idempotency ledger.
+func (e *Engine) GetRun(ctx context.Context, runID domain.RunID) (domain.Run, error) {
+	snap, err := e.store.Load(ctx, e.workspaceID)
+	if err != nil {
+		return domain.Run{}, err
+	}
+	_, run, found := findRun(&snap, runID)
+	if !found {
+		return domain.Run{}, &domain.Error{Code: domain.ErrNotFound, Detail: "run not found"}
+	}
+	return run, nil
+}
+
+func findProfile(snap *domain.Snapshot, id string) (domain.Profile, bool) {
+	for _, p := range snap.Profiles {
+		if p.ProfileID == id {
+			return p, true
+		}
+	}
+	return domain.Profile{}, false
+}
+
+func findRun(snap *domain.Snapshot, id domain.RunID) (int, domain.Run, bool) {
+	for i, r := range snap.Runs {
+		if r.ID == id {
+			return i, r, true
+		}
+	}
+	return 0, domain.Run{}, false
 }
 
 // MessageDeliveryRequest identifies a delivery fact recorded by the host.

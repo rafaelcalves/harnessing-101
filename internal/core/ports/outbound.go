@@ -96,9 +96,20 @@ type Mailbox interface {
 }
 
 // ProcessSupervisor is outbound port 7.
+//
+// Start's participation parameter (Phase 3 item 1's R2) is deliberately
+// separate from spec: spec is the profile's own fixed, approved shape;
+// participation is this one run's identifiers, and only those
+// identifiers may reach the launched tool through spec.ContextTransport
+// — never arbitrary request text. Start returns once the process is
+// spawned (or spawning definitively failed); it does not block for the
+// tool's whole lifetime. A *domain.Error with one of the R3
+// classification codes (ErrMissingTool, ErrAuthenticationRequired,
+// ErrNetworkEgressRefused, ErrUnsupported, ErrSpawnFailed) is expected
+// on failure — never a bare os/exec error string a caller has to parse.
 type ProcessSupervisor interface {
 	Capabilities(ctx context.Context) (any, error)
-	Start(ctx context.Context, runID domain.RunID, spec domain.ExecutionSpec) error
+	Start(ctx context.Context, runID domain.RunID, spec domain.ExecutionSpec, participation domain.RunParticipationContext) error
 	Observe(ctx context.Context, runID domain.RunID) (<-chan any, error)
 	Stop(ctx context.Context, runID domain.RunID, grace time.Duration) error
 	Recover(ctx context.Context, runID domain.RunID) error

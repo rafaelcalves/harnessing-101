@@ -190,6 +190,12 @@ func (c *Client) AcknowledgeMessage(ctx context.Context, req api.AcknowledgeMess
 	return out, err
 }
 
+func (c *Client) ApproveProfile(ctx context.Context, req api.ApproveProfileRequest) (domain.Receipt, error) {
+	var out domain.Receipt
+	err := c.call(ctx, "ApproveProfile", req, &out)
+	return out, err
+}
+
 func (c *Client) StartRun(ctx context.Context, req api.StartRunRequest) (domain.Receipt, error) {
 	var out domain.Receipt
 	err := c.call(ctx, "StartRun", req, &out)
@@ -228,6 +234,14 @@ func (c *Client) GetMessage(ctx context.Context, id domain.MessageID) (domain.Me
 	var out domain.Message
 	err := c.call(ctx, "GetMessage", struct {
 		MessageID domain.MessageID `json:"messageID"`
+	}{id}, &out)
+	return out, err
+}
+
+func (c *Client) GetRun(ctx context.Context, id domain.RunID) (domain.Run, error) {
+	var out domain.Run
+	err := c.call(ctx, "GetRun", struct {
+		RunID domain.RunID `json:"runID"`
 	}{id}, &out)
 	return out, err
 }
