@@ -2,6 +2,12 @@
 
 Kelly QA. **Bar only** — blocks item 2 engineering dispatch.
 
+**Amended H101-213 (2026-09-22):** mode B producer ordering per Stanley
+[`h101-212-parent-exit-startup-boundary.md`](../architecture/h101-212-parent-exit-startup-boundary.md)
+(`262c863`). Parent exits **after** successful start + `Running` observation, not before
+startup completes. QA-defined parent-release sync; parent-gone/worker-alive proof; N2
+fast-parent/idle-worker negative. Fast-exit classification unchanged (Creed floor).
+
 **Authority:** `phase3-exit-criteria.md` item 2; H101-130 tree-scope amendment;
 Stanley [`h101-128-phase3-supervision.md`](../architecture/h101-128-phase3-supervision.md)
 lines 9, 47–53 (group supervision, exit observation); Creed
@@ -66,13 +72,47 @@ on the **serve** process environment (child inherits serve env).
 
 ### Mode B — `parent_exits_worker_survives` (Stanley parent-exit case)
 
-Required native subtest per H101-130 / h101-128 line 9 (parent + worker, including
-parent exits before worker).
+**Amended H101-213.** Required native subtest per H101-130 / h101-128 line 9 (parent +
+worker, including parent exits **before worker** — **not** before startup completes).
+Authority: h101-212.
 
-1. `HARNESSING_FIXTURE_OUTPUT_MODE=parent_exits_worker_survives`
-2. Same sync file shape with `worker_pid=<worker>`
-3. Parent writes sync, **exits 0** while worker remains alive in the group
-4. **`Exited` must not** be recorded until worker is gone — proved in assertions S1–S3
+**Forbidden ordering (Stanley H101-212):** parent exits during `StartupWindow` while a
+same-group worker survives and `Start` accepts the run via group-existence alone.
+Fixture release is **test coordination only** — never a marker the production
+supervisor inspects to accept a start.
+
+#### QA-defined parent release (Kelly-owned)
+
+| Mechanism | Rule |
+| --- | --- |
+| `HARNESSING_FIXTURE_PARENT_RELEASE_FILE` | **Required** for mode B. Parent **blocks** after writing sync until this path contains **exact** bytes `parent-release\n` (14 bytes). Poll ≤50ms; fail after **30s**. |
+| Ordering | Parent release happens **only after** steps 4–5 below — never before OK receipt + `Running` observation. |
+
+#### Producer sequence (numbered — same serve owner throughout)
+
+1. Serve env: `parent_exits_worker_survives`, `SYNC_FILE`, `PARENT_RELEASE_FILE`.
+2. Fixture spawns same-group worker; writes sync:
+
+   ```
+   participated\npid=<parent>\nworker_pid=<worker>\n
+   ```
+
+3. Parent **blocks** (does **not** exit yet).
+4. Attached `start-run` → **OK receipt** (start operation complete under normal
+   fast-exit rules — no group-exists startup exception).
+5. Attached `harnessing run` shows **`State:      Running`**.
+6. Test writes `parent-release\n` to `PARENT_RELEASE_FILE`.
+7. Parent exits **0**; worker remains alive.
+8. **Parent-gone / worker-alive proof** (positive artefact, same serve owner):
+
+   | Probe | After step 7 |
+   | --- | --- |
+   | Parent `pid` from sync | **Fails** |
+   | `worker_pid` from sync | **Succeeds** |
+
+9. Assert S1–S3 (below), then `stop-run` → worker gone → `Exited`.
+
+**`Exited` must not** be recorded at step 7 or before `stop-run` clears the worker.
 
 ### Proving absence (god's hardest negative)
 
@@ -107,19 +147,28 @@ After producer A, via fresh attached CLI subprocesses on the **same serve owner*
 **Real-not-fake (item 2 D5):** real `harnessing` binary; real worker child; CLI
 `start-run` + `stop-run` + `run` only — no `fakeSupervisor`, no engine-only verdict.
 
-### Mode B sub-assertions (same test file, required)
+### Mode B sub-assertions (same test file, same serve owner, required)
+
+Observed **after** producer steps 1–7 and **before** `stop-run`:
 
 | # | Assertion |
 | --- | --- |
-| S1 | After parent exit, worker PID probe **still succeeds** before `stop-run` |
-| S2 | `stop-run` still required — run not `Exited` on parent exit alone |
+| S0 | Before parent release (step 5): both parent and worker PID probes **succeed** |
+| S1 | After parent exit (step 7): parent probe **fails**, worker probe **still succeeds** |
+| S2 | `harnessing run` on same owner shows **`Running`** (or `Stopping`) — **not** `Exited` on parent exit alone |
 | S3 | After `stop-run`, worker probe fails and run shows **`Exited`** |
 
-### Negative (same card)
+### Negatives (same card)
 
 | # | Assertion |
 | --- | --- |
 | N1 | `stop-run` on unknown `runID` → stable **`NotFound`**; persisted state unchanged (item 2 D3) |
+| N2 | **Fast-parent / idle-worker (H101-212):** fixture mode `fast_parent_idle_worker` spawns same-group idle worker (`worker_block` child) and parent exits **during startup** without participate blocking — `start-run` **fails** (not `Running`); `TestSupervisor_FastExitIsSpawnFailed` with `true` **still passes** unchanged. Test **cleans up** surviving worker (bounded teardown) |
+
+**N2 producer:** `HARNESSING_FIXTURE_OUTPUT_MODE=fast_parent_idle_worker` — fork worker,
+exit parent immediately; **no** `PARENT_RELEASE_FILE`, no participate sync wait. This is
+the regression complement to mode B's positive case; it must **not** reuse mode B's
+post-startup parent release path.
 
 ---
 
@@ -137,6 +186,13 @@ After producer A, via fresh attached CLI subprocesses on the **same serve owner*
 | J8 | Item 2 proof includes admin unblock / restart | **Process** | H101-173 forbidden |
 | J9 | Pass on one ADR target via `t.Skip` | **Test** | R8 / ADR 0001 |
 | J10 | Escaping/daemon profile promised tree kill without spawn reject | **Product** | D7 |
+| J11 | `Start` succeeds because parent exited during startup leaving idle same-group worker | **Product** | H101-212 — fast-exit / groupExists exception forbidden |
+| J12 | Mode B parent exits before OK receipt or before `Running` observation | **Test** | H101-213 ordering violation |
+| J13 | N2 fast-parent case reaches `Running` or leaves worker without cleanup | **Test** | N2 |
+
+**Preserved (Creed floor / Stanley H101-212):** no weaker fast-exit observables; no
+supervisor inspection of fixture release markers for start acceptance; H101-173 no
+unblock/restart in this card.
 
 ---
 
@@ -174,4 +230,4 @@ boundary in item 8 — same as criteria already states.
 
 ---
 
-Authored by Kelly (QA), H101-209.
+Authored by Kelly (QA), H101-209. Amended H101-213.

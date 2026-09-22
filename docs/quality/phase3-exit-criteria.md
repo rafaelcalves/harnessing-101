@@ -324,11 +324,11 @@ Full amendment authority: Angela H101-146 / owner H101-142. Ruling:
 
 ### H101-209 — Item 2 acceptance spec (2026-09-22)
 
-Item 2 engineering blocked until this spec commits. **New producers required:**
-`spawn_worker_then_block` + `parent_exits_worker_survives` (none of the five existing
-fixture modes suffice). Serve-owned start/stop; PID-probe positive artefact for tree
-gone (worker_pid marker). Stanley h101-128 sufficient — no new behaviour card unless
-implementation finds a gap. H101-173: no unblock/restart in scope. Full spec:
+Item 2 engineering blocked until amended spec commits. **Producers:**
+`spawn_worker_then_block`, `parent_exits_worker_survives` (H101-213 ordering:
+parent-release after `Running`), `fast_parent_idle_worker` (N2 negative). Serve-owned;
+PID-probe artefacts. **Amended H101-213:** Stanley h101-212 — no groupExists startup
+exception; parent exits after start, not during. Full spec:
 [`h101-209-item2-acceptance-spec.md`](h101-209-item2-acceptance-spec.md).
 
 ---
