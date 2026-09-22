@@ -2,10 +2,15 @@
 
 Kelly QA. **Bar only** — blocks item 10 engineering dispatch.
 
+**Amended H101-203 (2026-09-22):** Creed H101-197 clean review — pre-pair disclosure
+**MUST** (testable); stuck-slot observability + documented user recovery **required**;
+availability cost of no timeout-takeover **not** a construction gate. Never-infer
+vocabulary added.
+
 **Authority:** owner H101-163/H101-174; Stanley
 [`h101-171-session-registration-protocol.md`](../architecture/h101-171-session-registration-protocol.md);
 Kelly H101-172/H101-196; Angela H101-177 (cooperative check-in first product,
-participation profile).
+participation profile); Creed H101-197.
 
 **Single item.** Managed launch for Claude Code remains backlog **B** (H101-174);
 this item is the **attachment-first** proof. It does **not** discharge item 1 Layer B,
@@ -86,6 +91,46 @@ After registration fixture run via fresh CLI subprocesses:
 | R4 | After fixture ack command: message **is** `AcknowledgedAt` |
 | R5 | No `RunID` created for registration path (query run list / documented negative) |
 | R6 | `managedStartRunUsed` guard: no `StartRun` receipt in registration test log |
+| R7 | **Pre-pair disclosure (MUST):** before pairing redemption succeeds, shipped pairing preview/invitation surface (CLI or documented equivalent) emits **all** required disclosure lines below — not aspirational |
+| R8 | **Stuck-slot observability:** when registration is `Stale` or `Disconnected`, shipped query shows that state and names the blocking slot (agent still occupied) |
+| R9 | **Documented recovery:** from `Stale`/`Disconnected`, the guide-named **explicit user replacement/revoke** command succeeds, slot releases, and a fresh pairing (or managed start when otherwise eligible) is admitted — no timeout-based auto-takeover |
+
+### R7 — required pre-pair disclosure lines (MUST)
+
+Security-load-bearing copy is **not** `should` (Creed H101-46 class). Criteria bind even
+if h101-171 line 101 still says `should`; **criteria route sufficient** — recommend
+Stanley align spec text to `must` on next touch, not a construction blocker.
+
+Passing test asserts these **exact substrings** on the pre-pair surface (stdout, stderr,
+or named JSON field — engineer documents which):
+
+| Token | Meaning |
+| --- | --- |
+| `user-paired` | Pairing is user-authorized, not verified tool identity |
+| `tool identity unverified` | No cryptographic tool attestation |
+| `not product-managed start` | Registration ≠ `StartRun` / process control |
+| `worker capability` | Grant is narrow participation, not admin |
+| `no reviewer authority` | Worker cannot accept/reject as human |
+| `no delegation` | Worker cannot widen authority |
+
+**Not sufficient:** disclosure only in external docs; post-pair-only copy; UI hide without
+CLI-testable surface.
+
+### R8–R9 — stuck slot (availability cost not gated; recovery route required)
+
+Creed H101-197: abandoned `Stale`/`Disconnected` bindings can block re-pairing **and**
+managed start until explicit user replacement — **integrity-preserving, availability-
+costing**. That tradeoff does **not** gate construction (Angela product call on whether
+to soften later).
+
+Item 10 **does** require:
+
+1. User can **see** the stuck state (R8) — never silent indefinite block.
+2. User has a **documented, testable** escape (R9) — H101-171 explicit
+   replace/revoke/unregister path; no invented timeout takeover.
+
+**Negative (preserved):** heartbeat staleness does **not** auto-release slot; test must
+not assert timeout-based takeover as pass behavior.
 
 Layer B adds manifest file + runner stdout tails per H101-153 anti-fraud rules.
 
@@ -103,6 +148,29 @@ Layer B adds manifest file + runner stdout tails per H101-153 anti-fraud rules.
 | D6 | Registration manifest hand-written | **Evidence** | Runner output only (H101-153 D14) |
 | D7 | Item 10 pass used to discharge item 1 Layer B | **Process** | H101-196 forbidden reading |
 | D8 | Disclosure omits user-paired / tool-unverified limit | **Docs** | Item 8 CF2 cross-ref |
+| D9 | Pre-pair disclosure missing any R7 token or appears only after pairing | **Product** | Creed H101-203 — security-load-bearing MUST |
+| D10 | `Stale`/`Disconnected` slot blocks admission but query shows Connected or silent | **Product** | R8 observability |
+| D11 | No documented user replacement/revoke path from stuck slot | **Docs/Product** | R9 recovery |
+| D12 | Test or product uses timeout-based slot takeover | **Product** | H101-171 forbidden shortcut |
+
+---
+
+## Never-infer vocabulary (Creed H101-197 — confirmed)
+
+Item 10 evidence and product copy must **never** infer:
+
+| Never infer | From |
+| --- | --- |
+| Tool identity | Pairing credential alone |
+| Liveness or model attention | Connected session / heartbeat |
+| Participation or ack | Live connector, queued delivery, successful poll |
+| Death or auto-release | Heartbeat staleness |
+| Managed-run resolution | Registration alone |
+
+Tests that treat any column right as proof of the column left are **defect class Test**
+(new row **D13**).
+
+| D13 | Evidence conflates pairing credential with verified tool identity, or poll/delivery with ack/participation | **Test** | Never-infer table |
 
 ---
 
@@ -134,4 +202,4 @@ Registered external sessions are **not** product-managed starts. Copy must state
 **NOT SATISFIED** — bar only. Dispatch blocked until god commits this spec and
 Stanley/security gates clear construction per H101-171.
 
-Authored by Kelly (QA), H101-196.
+Authored by Kelly (QA), H101-196. Amended H101-203.

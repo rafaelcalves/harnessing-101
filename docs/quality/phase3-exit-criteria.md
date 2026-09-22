@@ -674,8 +674,14 @@ check-in (H101-177).
 | D4 | Manifest omits `managedStartRunUsed: false` | **Evidence** | Hard guard |
 | D5 | Item 10 pass used to close item 1 Layer B | **Process** | H101-196 forbidden |
 | D6 | Disclosure omits user-paired / unverified-tool limit | **Docs** | Item 8 CF2 cross-ref |
+| D9–D13 | Pre-pair MUST disclosure, stuck-slot observability/recovery, never-infer violations | **Product/Test** | H101-203 (Creed H101-197) |
 
-**Standing:** **NOT SATISFIED** — bar only at H101-196.
+**Amended H101-203 (2026-09-22):** pre-pair disclosure tokens **MUST** be testable (R7);
+`Stale`/`Disconnected` must be observable (R8) with documented user replacement path
+(R9). No timeout-takeover gate. Full bar:
+[`h101-196-item10-registered-session-acceptance-spec.md`](h101-196-item10-registered-session-acceptance-spec.md).
+
+**Standing:** **NOT SATISFIED** — bar only.
 
 ---
 
