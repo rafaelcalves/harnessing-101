@@ -2,6 +2,11 @@
 
 Kelly QA. **Bar only** — blocks item 5 engineering dispatch.
 
+**Amended H101-199 (2026-09-22):** producer replaced per Stanley
+[`h101-195-graceful-capture-producer.md`](../architecture/h101-195-graceful-capture-producer.md)
+(`a61187f`). Fast-exit classification **unchanged**. Serve-owned capture; QA-defined
+release below. Kevin held until this amendment commits.
+
 **Authority:** `phase3-exit-criteria.md` item 5; h101-128 lines 75–79; boundaries ports
 4 and 8; H101-190 (shared foundation — D4 does **not** discharge item 5).
 
@@ -37,22 +42,26 @@ this spec names observables; no new Stanley behaviour card expected.
 
 ## Passing assertions (named)
 
-After the **graceful-complete** producer (below), via **fresh** CLI subprocesses
-only:
+After the **serve-owned graceful-complete** producer (below), assert I1–I6 using
+**fresh CLI reader subprocesses** that **attach to the same serve owner** (same
+workspace lock / session transport target). A fresh reader is **not** a fresh
+competing host open. Wait boundedly for terminal capture before asserting I2.
 
 | # | Assertion |
 | --- | --- |
-| I1 | `harnessing run-output` exit code **0** |
+| I1 | `harnessing run-output` (reader attached to **same owner**) exit code **0** |
 | I2 | `Capture status: complete` (exact `printRun`-class spacing on status line) |
 | I3 | stdout channel contains **exact** named literal `fixture-out-stdout\n` |
 | I4 | stderr channel contains **exact** named literal `fixture-out-stderr\n` |
-| I5 | Second `harnessing run-output` with **`-after-offset`** past the first chunk returns **only** later bytes (offset-ordered resume per boundaries port 8) |
-| I6 | `harnessing` state-event read path (subscribe/events command as shipped) does **not** contain either named literal — UI-08 separation (item 5 D2) |
+| I5 | Second `harnessing run-output` reader on the **same owner** with **`-after-offset`** past the first chunk returns **only** later bytes (offset-ordered resume per boundaries port 8) |
+| I6 | `harnessing` state-event read path (subscribe/events command as shipped), reader on the **same owner**, does **not** contain either named literal — UI-08 separation (item 5 D2) |
 
-**Real-not-fake evidence (item 5 D5):** test builds real `harnessing` binary,
-drives **`harnessing start-run`** to completion (OK receipt), reads output only
-through **`harnessing run-output`**. No `fakeSupervisor`, no engine
-`ReadOutput`, no journal file parse in test.
+**Real-not-fake evidence (item 5 D5):** test builds real `harnessing` binary;
+**`harnessing serve`** owns the workspace; **`harnessing start-run`** is a client
+that completes the **start operation** (OK receipt) while the child remains under
+the continuing host; output read only through **`harnessing run-output`** readers
+on that owner. No `fakeSupervisor`, no engine `ReadOutput`, no journal file parse,
+no `host.Open` bypass in test.
 
 **Not sufficient:**
 
@@ -62,28 +71,61 @@ through **`harnessing run-output`**. No `fakeSupervisor`, no engine
 
 ---
 
-## Condition producer (Kelly ruling)
+## Condition producer (Kelly ruling — amended H101-199)
 
-**Use normal participate path with a new fixture mode — `emit_both_channels_then_exit`:**
+**Serve-owned graceful capture.** Supersedes withdrawn one-shot
+`emit_both_channels_then_exit` (StartupWindow fast-exit = `ErrSpawnFailed`; capture
+goroutines die with one-shot process — H101-195).
 
-1. Real binary; register + approve `__fixture-participate` + `context-file`.
-2. `HARNESSING_FIXTURE_OUTPUT_MODE=emit_both_channels_then_exit` (writes
-   `participated\npid=<N>` to sync if set, emits stdout + stderr literals, **exits 0**).
-3. **`harnessing start-run`** runs to **completion** (OK receipt) — graceful path.
-4. Fresh `harnessing run-output` → I1–I4.
-5. Fresh `harnessing run-output -after-offset <N>` → I5.
+### QA-defined release (Kelly-owned — not engineer discretion)
+
+Fixture mode: `HARNESSING_FIXTURE_OUTPUT_MODE=serve_release_both_channels`.
+
+| Mechanism | Rule |
+| --- | --- |
+| `HARNESSING_FIXTURE_SYNC_FILE` | **Required.** Fixture writes `participated\npid=<N>\n` **before** blocking — proves startup survived (same marker class as item 4 B5′). |
+| `HARNESSING_FIXTURE_RELEASE_FILE` | **Required.** Fixture **blocks** until this path exists and contains **exact** bytes `release\n` (7 bytes). Poll interval ≤50ms; **wall-clock fail** if unreleased after **30s** (Kelly CI constant). |
+| Post-release emission | On valid release only: write `fixture-out-stdout\n` to stdout, `fixture-out-stderr\n` to stderr, **exit 0**. |
+| Ordering | No `HARNESSING_FIXTURE_SLEEP_MS` for release ordering. No fixed sleep race against `StartupWindow`. Release file is the sole gate. |
+
+Test writes `release\n` to `HARNESSING_FIXTURE_RELEASE_FILE` **after** the start
+client receives OK receipt and **before** bounded wait for capture complete.
+
+### Producer sequence (numbered)
+
+1. Start real **`harnessing serve`**; wait until workspace ownership is live.
+2. Register + approve `__fixture-participate` + `context-file` through serve-attached CLI clients.
+3. Set fixture env: `serve_release_both_channels`, `SYNC_FILE`, `RELEASE_FILE` paths.
+4. **`harnessing start-run`** (client) → **OK receipt** (start **operation** complete). Client may exit. Child remains supervised by **same owner**.
+5. Test writes `release\n` to `RELEASE_FILE`.
+6. Fixture emits both literals and exits naturally; host **drains**, durably appends, records `Finish(Complete)` when justified.
+7. **Fresh reader CLI subprocesses** attach to **same serve owner** → I1–I6.
+8. **Teardown serve** only after evidence collection.
+
+**Preserved (H101-195):** no exit-zero exception, context-file exception, sibling-marker
+check, fixture-content inspection in supervisor, or fixture-aware fast-exit promotion.
+`TestSupervisor_FastExitIsSpawnFailed` with `true` must still fail.
 
 **Do not use:**
 
 | Producer | Why |
 | --- | --- |
-| `prefix_then_block` | D4 crash — **already discharged**; proves interrupted only |
+| One-shot CLI `start-run` without continuing serve | Capture lifetime mismatch (H101-195) |
+| `emit_both_channels_then_exit` (withdrawn) | Fast-exit inside StartupWindow |
+| `prefix_then_block` | D4 crash — **already discharged**; interrupted only |
 | `block_after_marker` / `start-called` | E2 Starting window |
-| Native `HARNESSING_RECONCILE_HELPER` alone | No CLI start-run + journal path (D5) |
+| `host.Open` / direct journal read in test | Bypasses shipped reader path (H101-195) |
+| Shutting down owner to bypass lock | Not equivalent producer |
 
-**Product work expected:** `Finish(Complete)` when child exits gracefully and
-start-run observation commits; CLI `-after-offset` (and optional `-byte-limit`)
-on `run-output`; supervisor drain or equivalent so complete status is honest.
+**Product work expected:** serve session transport carries `run-output` and state-event
+reads for attached readers; `Finish(Complete)` after drain on natural child exit;
+CLI `-after-offset` on `run-output`. Shared session/transport plumbing is legitimate
+implementation work and **does not** automatically discharge item 6 (H101-195).
+
+**Non-discharge lines (carry forward):**
+
+- Capture `complete` does **not** prove task completion or process-group disappearance.
+- Successful start receipt does **not** prove capture complete or child exit.
 
 ---
 
@@ -95,7 +137,7 @@ on `run-output`; supervisor drain or equivalent so complete status is honest.
 | Offset resume | port 8 ReadAfter | I5 |
 | Channel identity | port 4 stdout/stderr | I3, I4 |
 | RunOutput ≠ StateEvents | UI-08 | I6 |
-| Real supervision path | ADR 0003 | I1–I5 via CLI start-run |
+| Real supervision path | ADR 0003 | serve owner + CLI start-run + CLI readers |
 
 **Explicitly out of this card unless implementer stops:**
 

@@ -61,7 +61,7 @@ disclosure obligation with checkable doc/provenance assertions.
 
 ---
 
-## Phase 3 is not accepted until all nine items pass
+## Phase 3 is not accepted until all ten items pass
 
 | # | Criterion | CI-checkable? |
 | --- | --- | --- |
@@ -74,10 +74,14 @@ disclosure obligation with checkable doc/provenance assertions.
 | 7 | Phase 3 adapter contract on both adapters | **Yes** (with inherited G-limits) |
 | 8 | Trust-boundary honesty (Creed CF2/CF3) | **Disclosure** + partial CI |
 | 9 | Runnable local startup guide | **Acceptance procedure** (not automated CI) |
+| 10 | Registered external agent session (attachment-first) | **Yes** (Layer A) + manifest (Layer B) |
 
-**Count: 9 items.** Seven are CI-checkable on `main`. Item 8 is primarily disclosure with
-named CI spot-checks. Item 9 is satisfied by a documented cold-read acceptance procedure
-(owner-requested; converges with `definition.md` §5 and H101-120 finding).
+**Count: 10 items** — **amended H101-196 (2026-09-22)** after owner H101-174
+attachment-first choice. Seven core process-control items remain CI-checkable on
+`main`. Item 8 is primarily disclosure with named CI spot-checks. Item 9 is a
+cold-read acceptance procedure. Item 10 is **required** for Claude Code
+participation under attachment-first; it does **not** discharge item 1 managed
+`StartRun` (see item 10 spec).
 
 **Budget enforcement shape:** **one exit item** (item 3) with **two named failure-mode
 rows** (elapsed-time stop vs reported-token stop). Both must actually **stop** a run;
@@ -244,6 +248,28 @@ runner manifest or descriptor deferral only. Evidence bar for registration:
 provisional pending Stanley H101-171. Full ruling:
 [`h101-172-layerb-registration-ruling.md`](h101-172-layerb-registration-ruling.md).
 
+### H101-196 — Attachment-first gate disposition (2026-09-22)
+
+**Authority:** owner H101-174 — attachment-first (**A**); managed launch (**B**) on
+near-term backlog.
+
+| Question | Verdict |
+| --- | --- |
+| Item 1 Layer B Claude under attachment-first | **Closes by owner DEFERRAL** (H101-153), **not** registration, **not** manifest — pending committed descriptor update |
+| New exit item | **Item 10 written** — [`h101-196-item10-registered-session-acceptance-spec.md`](h101-196-item10-registered-session-acceptance-spec.md) |
+| Backlog B vs plain deferral | **Same deferral gate**; **extra** `deferral.backlog` metadata + item 10 obligation for Claude — not identical to Codex/Cursor indefinite deferrals |
+
+**Layer B Claude after deferral commit:** **SATISFIED BY OWNER DEFERRAL** — **not**
+demonstrated managed-start compatibility. Item 1 overall re-verdict when descriptor
+lands. **Item 10 NOT SATISFIED** until implementation.
+
+**Honest ceiling:** Phase 3 may exit without Claude Code managed `StartRun` proof;
+attachment proved via item 10 only. Manual attachment cannot be relabelled
+managed-start evidence (D13 unchanged).
+
+Full ruling:
+[`h101-196-attachment-first-gate-disposition.md`](h101-196-attachment-first-gate-disposition.md).
+
 ### H101-153 Layer B refinements (2026-09-21)
 
 **Refinement 1:** runner script **required**; manifest is runner output only.
@@ -264,7 +290,9 @@ fixture + profile context wiring + failure taxonomy + Layer B manifest procedure
 
 When the Phase 3 guide supplement lands (H101-138 limit), it must document managed
 `StartRun` with a **named participation fixture** walkthrough and state which
-agentic CLIs have Layer B manifests vs owner deferral.
+agentic CLIs have Layer B manifests vs owner deferral. **H101-196:** Claude Code
+must be listed as **deferred managed-start** with the **item 10 registration**
+walkthrough as the participation path — not Layer B manifest evidence.
 
 Full amendment authority: Angela H101-146 / owner H101-142. Ruling:
 [`h101-147-phase3-item1-amendment.md`](h101-147-phase3-item1-amendment.md).
@@ -430,9 +458,11 @@ evidence-scope limit only (see H101-193 D1 note: not a latent defect). Ruling:
 
 ### H101-193 — Item 5 acceptance spec (2026-09-22)
 
-Item 5 engineering blocked until this spec lands. Beyond D4: graceful **complete**
+Item 5 engineering blocked until amended spec commits. Beyond D4: graceful **complete**
 capture, stdout+stderr channels, offset resume, UI-08 separation, real-not-fake CLI
-proof. Producer: `emit_both_channels_then_exit` participate mode. Full spec:
+proof. **Amended H101-199:** serve-owned producer with QA-defined
+`serve_release_both_channels` + `HARNESSING_FIXTURE_RELEASE_FILE` (Stanley H101-195
+`a61187f`). Withdrawn: one-shot `emit_both_channels_then_exit`. Full spec:
 [`h101-193-item5-acceptance-spec.md`](h101-193-item5-acceptance-spec.md).
 
 ---
@@ -604,6 +634,48 @@ the **exit gate** on that deliverable.
 | D3 | Guide references uncommitted or internal-only paths | **Docs** | Not reproducible |
 | D4 | Phase 3 exit claimed without cold-read record | **Process** | Item 9 not discharged |
 | D5 | Coordination guide accepted but Phase 3 process-control section not yet runnable | **Expected limit** | H101-138 — supplement + second cold-read when items 1–7 ship |
+| D6 | Guide implies Claude Code managed-start was demonstrated when only item 10 attachment applies | **Docs** | H101-196 — deferral + item 10 path |
+
+---
+
+### Item 10 — Registered external agent session (attachment-first)
+
+**Added H101-196 (2026-09-22).** Owner H101-174 chose attachment-first; managed
+launch for Claude Code is backlog **B**, not dropped. This item proves **linked
+user-started sessions** participate through the product mailbox. It does **not**
+discharge item 1 Layer B, item 2–4 managed-run obligations, or item 5 journal.
+
+**Authority:** Stanley
+[`h101-171-session-registration-protocol.md`](../architecture/h101-171-session-registration-protocol.md);
+acceptance bar:
+[`h101-196-item10-registered-session-acceptance-spec.md`](h101-196-item10-registered-session-acceptance-spec.md).
+
+A user-started tool session is **linked** to a registered agent and participation-
+profile revision through a **shipped product command** (not shell convention).
+After linking:
+
+- Messages to that agent are **deliverable and observable** through product queries
+- The session **acknowledges** through an explicit product command — not passive bridge
+- Evidence carries `evidenceClass: registered_external_session`,
+  `managedStartRunUsed: false`, `preExistingSession: true`
+
+**Two-layer proof:** Layer A = in-repo registration fixture on both ADR targets
+(entrypoint **not** `start-run`). Layer B = committed registration runner manifest
+(same anti-fraud rules as item 1 H101-153). **First product:** cooperative
+check-in (H101-177).
+
+#### Decision table
+
+| # | Observation | Defect class | Fix |
+| --- | --- | --- | --- |
+| D1 | Registration without shipped CLI | **Evidence** | Product command required |
+| D2 | Delivery/ack via `GetSnapshot` bypass | **Test** | CLI/query only |
+| D3 | Passive bridge sets `AcknowledgedAt` | **Product** | Explicit worker ack |
+| D4 | Manifest omits `managedStartRunUsed: false` | **Evidence** | Hard guard |
+| D5 | Item 10 pass used to close item 1 Layer B | **Process** | H101-196 forbidden |
+| D6 | Disclosure omits user-paired / unverified-tool limit | **Docs** | Item 8 CF2 cross-ref |
+
+**Standing:** **NOT SATISFIED** — bar only at H101-196.
 
 ---
 
