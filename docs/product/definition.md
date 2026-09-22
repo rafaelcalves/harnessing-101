@@ -133,15 +133,27 @@ Avoid sitcom names, character avatars, office-floor visuals, and borrowed slogan
 
 ## Connecting existing sessions (H101-175)
 
-**Status — 2026-09-22: owner-directed work, not implemented.** The owner's H101-163 decision adds registration of an already-open agent session linked to a workspace agent and profile. This is a product amendment to H101-146's launch-focused framing, carried into [H101-147](../quality/h101-147-phase3-item1-amendment.md); it is not a shipped connection feature or a claim of Claude Code, Codex or Cursor Agent compatibility.
+**Status — 2026-09-22: owner-directed work, not implemented.** The owner's H101-163 decision adds registration of an already-open agent session linked to a workspace agent and participation profile. This is a product amendment to H101-146's launch-focused framing, carried into [H101-147](../quality/h101-147-phase3-item1-amendment.md); it is not a shipped connection feature or a claim of Claude Code, Codex or Cursor Agent compatibility.
 
 ### User-facing direction
 
-**Proposed experience:** “Bring the agent tools you already use. Connect an existing session to a named agent and profile in your workspace so it can participate in tasks and messages through the supported protocol. Alternatively, have Harnessing 101 start a supported installed tool using a profile you have approved. Connecting an existing session does not make its process managed by Harnessing 101.”
+**Proposed experience:** “Bring the agent tools you already use. Connect an existing session to a named agent and participation profile in your workspace so it can participate in tasks and messages through the supported protocol. Alternatively, have Harnessing 101 start a supported installed tool using an execution profile you have approved. Connecting an existing session does not make its process managed by Harnessing 101.”
 
 This wording describes the intended participation paths, not their current availability. Lead with the user who brings their own sessions; managed launch is an additional path when supported and approved. Sections 1–2 already identify that user and the job of coordinating existing sessions. The user continues to install and authenticate their chosen tools; this amendment adds no bundled model access or implicit provider setup.
 
 **Product rationale, not measured user benefit:** connecting a session that already holds useful context could avoid restarting it solely to join the workspace. That is why this refinement is preferred; neither reduced setup effort nor improved coordination has been established by user research or a successful real-tool walkthrough.
+
+### Check-in and profile meaning (H101-177 / H101-179)
+
+**Product clarification — 2026-09-22; proposed behavior, not implemented:** cooperative check-in is the initial registration experience.
+
+“Messages wait in this agent's mailbox until its session checks in. Registration does not wake an idle conversation or guarantee a reply. Ask the session to check for messages when you want it to resume.”
+
+A live connector, queued delivery or a successful poll is not acknowledgement or evidence of work. Acknowledgement remains an explicit action by the participating session. Instructions to check at turn boundaries do not guarantee that an idle model will act; automatic wake is not part of this initial promise.
+
+“A participation profile describes the session you connect. It does not approve launching a program or verify the tool's identity.”
+
+The participation profile is descriptive: it is not proof of the running program or provider, a credential store, or a launch authorization. An execution profile remains the separately approved configuration for product-managed starts. Registration requires explicit user authorization to pair the session for workspace participation, but does not require manufacturing a launch approval. Neither profile association nor approval transfers silently between the two paths.
 
 ### Participation is separate from process control
 
