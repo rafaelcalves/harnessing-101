@@ -37,8 +37,9 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	_, _ = fmt.Fprintf(stdout, "harnessing serve: workspace open, listening (pid %d, generation %s)\n", os.Getpid(), generation)
-	code := assembly.Serve(ctx, stderr, *wf.root, domain.WorkspaceID(*wf.id), []domain.AgentID(wf.reviewers), generation)
+	code := assembly.ServeWithReady(ctx, stderr, *wf.root, domain.WorkspaceID(*wf.id), []domain.AgentID(wf.reviewers), generation, func() {
+		_, _ = fmt.Fprintf(stdout, "harnessing serve: workspace open, listening (pid %d, generation %s)\n", os.Getpid(), generation)
+	})
 	_, _ = fmt.Fprintln(stdout, "harnessing serve: closed")
 	return code
 }

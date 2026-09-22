@@ -23,6 +23,17 @@ import (
 // later card adds whichever of those the exit-criteria table requires).
 // Serve returns when ctx is cancelled or the workspace fails to open/close.
 func Serve(ctx context.Context, stderr io.Writer, root string, workspaceID domain.WorkspaceID, reviewers []domain.AgentID, generation string) int {
+	return serve(ctx, stderr, root, workspaceID, reviewers, generation, nil)
+}
+
+// ServeWithReady is Serve with a readiness callback invoked after the host
+// marker is published. This lets a CLI announce readiness only once the
+// workspace lock and transport host are actually live.
+func ServeWithReady(ctx context.Context, stderr io.Writer, root string, workspaceID domain.WorkspaceID, reviewers []domain.AgentID, generation string, ready func()) int {
+	return serve(ctx, stderr, root, workspaceID, reviewers, generation, ready)
+}
+
+func serve(ctx context.Context, stderr io.Writer, root string, workspaceID domain.WorkspaceID, reviewers []domain.AgentID, generation string, ready func()) int {
 	if root == "" {
 		_, _ = fmt.Fprintf(stderr, "harnessing serve: -workspace is required\n")
 		return 1
@@ -36,6 +47,7 @@ func Serve(ctx context.Context, stderr io.Writer, root string, workspaceID domai
 	h := &transport.Host{
 		Root:       root,
 		Generation: generation,
+		Ready:      ready,
 		Bind: func(_ context.Context, attach transport.AttachPayload) (api.FrontendSession, error) {
 			return host.BindFrontendSession(caps, attach.CallerAgentID), nil
 		},

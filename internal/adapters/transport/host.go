@@ -27,6 +27,10 @@ type Host struct {
 	Root       string
 	Generation string
 	Bind       func(ctx context.Context, attach AttachPayload) (api.FrontendSession, error)
+	// Ready is called after the host marker is written and the workspace
+	// transport is ready to accept attachments. Assembly uses this to publish
+	// readiness only after the owning workspace lock is held.
+	Ready func()
 	// Tick is an optional assembly-owned effect pass. Host invokes it from
 	// the same serialized poll loop as session dispatch, so callers cannot
 	// race a host-owned state effect with transport mutation.
@@ -50,6 +54,9 @@ func (h *Host) Run(ctx context.Context) error {
 	}
 	if err := writeAtomic(serveDir(h.Root), hostMarkerPath(h.Root), marker); err != nil {
 		return err
+	}
+	if h.Ready != nil {
+		h.Ready()
 	}
 	defer func() { _ = removeMarker(h.Root) }()
 
