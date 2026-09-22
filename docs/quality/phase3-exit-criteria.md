@@ -336,8 +336,9 @@ Item 2 engineering blocked until amended spec commits **and** H101-218 binding l
 **Producers:**
 `spawn_worker_then_block`, `parent_exits_worker_survives` (H101-213 ordering:
 parent-release after `Running`), `fast_parent_idle_worker` (N2 negative). Serve-owned;
-PID-probe artefacts. **Amended H101-213:** Stanley h101-212 — no groupExists startup
-exception; parent exits after start, not during. Full spec:
+PID-probe + **`worker_ready\n`** worker self-attestation (H101-221). **Amended H101-213:**
+Stanley h101-212 — no groupExists startup exception; parent exits after start, not during.
+Full spec:
 [`h101-209-item2-acceptance-spec.md`](h101-209-item2-acceptance-spec.md).
 
 ---

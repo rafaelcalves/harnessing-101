@@ -8,6 +8,10 @@ Kelly QA. **Bar only** — blocks item 2 engineering dispatch.
 startup completes. QA-defined parent-release sync; parent-gone/worker-alive proof; N2
 fast-parent/idle-worker negative. Fast-exit classification unchanged (Creed floor).
 
+**Amended H101-221 (2026-09-22):** parent-written `worker_pid` is a **routing hint only** —
+not worker-alive proof. Worker must append **`worker_ready\n`** to the sync file itself
+after starting (false-green gap: dead worker + parent-claimed pid).
+
 **Authority:** `phase3-exit-criteria.md` item 2; H101-130 tree-scope amendment;
 Stanley [`h101-128-phase3-supervision.md`](../architecture/h101-128-phase3-supervision.md)
 lines 9, 47–53 (group supervision, exit observation); Creed
@@ -45,6 +49,29 @@ admin unblock, or restart. No `RecoveryRequired` clearance path belongs here.
 
 **New producer required:** two fixture modes below. Item 2 cannot reuse item 5's
 graceful-exit or item 4's crash producers.
+
+---
+
+## Worker self-attestation (H101-221 — all tree modes)
+
+Parent-written `worker_pid=<N>` is recorded **immediately after fork**, before the worker
+runs. A PID (process ID) probe on that number alone is **not** evidence the launched worker
+lived — same shape as Creed's recorded-address warnings and H101-217's decoy row.
+
+| Party | Sync file obligation |
+| --- | --- |
+| **Parent** | May write `participated\npid=<parent>\nworker_pid=<worker>\n` (routing hint) |
+| **Worker** | **Must** append exact bytes **`worker_ready\n`** (13 bytes) to the same
+  `HARNESSING_FIXTURE_SYNC_FILE` **only after** the worker process has started its blocking
+  loop (`worker_block` mode) |
+
+**Test poll:** ≤50ms for `worker_ready\n` in sync; fail after **30s**. Any row that asserts
+worker-alive (I2–I3, S0–S1, mode B step 8, proving-absence "before stop") **requires**
+`worker_ready\n` **and** a succeeding PID probe on the `worker_pid` from sync — both, never
+either alone.
+
+**N2 negative:** `worker_ready\n` must be **absent** when `start-run` fails (dead/immediate-exit
+worker must not satisfy attestation).
 
 ---
 
@@ -105,10 +132,11 @@ supervisor inspects to accept a start.
 7. Parent exits **0**; worker remains alive.
 8. **Parent-gone / worker-alive proof** (positive artefact, same serve owner):
 
-   | Probe | After step 7 |
+   | Check | After step 7 |
    | --- | --- |
-   | Parent `pid` from sync | **Fails** |
-   | `worker_pid` from sync | **Succeeds** |
+   | Parent `pid` from sync | PID probe **fails** |
+   | Sync file | Contains **`worker_ready\n`** (worker-written, not parent) |
+   | `worker_pid` from sync | PID probe **succeeds** |
 
 9. Assert S1–S3 (below), then `stop-run` → worker gone → `Exited`.
 
@@ -121,7 +149,7 @@ item 10 REPLACE PID marker):
 
 | Phase | Observable |
 | --- | --- |
-| Before `stop-run` | Sync file contains `worker_pid=<N>`; **PID probe succeeds** for worker (and parent in mode A) |
+| Before `stop-run` | Sync contains `worker_pid=<N>` **and** **`worker_ready\n`**; PID probe succeeds for worker (and parent in mode A) |
 | After `stop-run` + bounded wait | **PID probe fails** for `worker_pid` within **30s** wall clock (Kelly E3-class bound, same order of magnitude as item 3) |
 | Terminal state | `harnessing run` (attached reader) shows **`Exited`** only after worker probe fails |
 
@@ -137,8 +165,8 @@ After producer A, via fresh attached CLI subprocesses on the **same serve owner*
 | # | Assertion |
 | --- | --- |
 | I1 | `start-run` exit **0** with OK receipt; run observable **`Running`** before stop |
-| I2 | Sync file contains **`worker_pid=<N>`** before `stop-run` |
-| I3 | PID probe **succeeds** for `worker_pid` immediately before `stop-run` |
+| I2 | Sync contains **`worker_pid=<N>`** and **`worker_ready\n`** before `stop-run` |
+| I3 | PID probe **succeeds** for `worker_pid` immediately before `stop-run` (I2 + probe — not probe alone) |
 | I4 | `stop-run` exit **0** (or documented in-progress receipt per h101-128) |
 | I5 | `harnessing run` shows **`State:      Exited`** (not stuck `Running`/`Stopping`) |
 | I6 | PID probe **fails** for `worker_pid` within **30s** after `stop-run` |
@@ -153,8 +181,8 @@ Observed **after** producer steps 1–7 and **before** `stop-run`:
 
 | # | Assertion |
 | --- | --- |
-| S0 | Before parent release (step 5): both parent and worker PID probes **succeed** |
-| S1 | After parent exit (step 7): parent probe **fails**, worker probe **still succeeds** |
+| S0 | Before parent release (step 5): sync has **`worker_ready\n`**; parent and worker PID probes **succeed** |
+| S1 | After parent exit (step 7): parent probe **fails**; sync still has **`worker_ready\n`**; worker probe **still succeeds** |
 | S2 | `harnessing run` on same owner shows **`Running`** (or `Stopping`) — **not** `Exited` on parent exit alone |
 | S3 | After `stop-run`, worker probe fails and run shows **`Exited`** |
 
@@ -163,7 +191,7 @@ Observed **after** producer steps 1–7 and **before** `stop-run`:
 | # | Assertion |
 | --- | --- |
 | N1 | `stop-run` on unknown `runID` → stable **`NotFound`**; persisted state unchanged (item 2 D3) |
-| N2 | **Fast-parent / idle-worker (H101-212):** fixture mode `fast_parent_idle_worker` spawns same-group idle worker (`worker_block` child) and parent exits **during startup** without participate blocking — `start-run` **fails** (not `Running`); `TestSupervisor_FastExitIsSpawnFailed` with `true` **still passes** unchanged. Test **cleans up** surviving worker (bounded teardown) |
+| N2 | **Fast-parent / idle-worker (H101-212):** fixture mode `fast_parent_idle_worker` spawns same-group idle worker (`worker_block` child) and parent exits **during startup** without participate blocking — `start-run` **fails** (not `Running`); **`worker_ready\n` absent**; `TestSupervisor_FastExitIsSpawnFailed` with `true` **still passes** unchanged. Test **cleans up** surviving worker (bounded teardown) |
 
 **N2 producer:** `HARNESSING_FIXTURE_OUTPUT_MODE=fast_parent_idle_worker` — fork worker,
 exit parent immediately; **no** `PARENT_RELEASE_FILE`, no participate sync wait. This is
@@ -189,6 +217,8 @@ post-startup parent release path.
 | J11 | `Start` succeeds because parent exited during startup leaving idle same-group worker | **Product** | H101-212 — fast-exit / groupExists exception forbidden |
 | J12 | Mode B parent exits before OK receipt or before `Running` observation | **Test** | H101-213 ordering violation |
 | J13 | N2 fast-parent case reaches `Running` or leaves worker without cleanup | **Test** | N2 |
+| J14 | Worker-alive from parent-only `worker_pid` or PID probe without `worker_ready\n` | **Test** | H101-221 |
+| J15 | `worker_ready\n` present but PID probe fails (stale attestation) | **Test** | H101-221 |
 
 **Preserved (Creed floor / Stanley H101-212):** no weaker fast-exit observables; no
 supervisor inspection of fixture release markers for start acceptance; H101-173 no
@@ -230,4 +260,4 @@ boundary in item 8 — same as criteria already states.
 
 ---
 
-Authored by Kelly (QA), H101-209. Amended H101-213.
+Authored by Kelly (QA), H101-209. Amended H101-213, H101-221.

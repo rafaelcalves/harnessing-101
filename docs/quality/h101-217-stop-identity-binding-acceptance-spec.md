@@ -74,7 +74,7 @@ After producer step 7 (parent released, worker alive):
 | # | Assertion |
 | --- | --- |
 | T1 | `leader_pid` (sync `pid=`) is **zombie** per platform table — **TERMINATION without REAPING** |
-| T2 | `worker_pid` probe succeeds — worker **running** |
+| T2 | Sync contains **`worker_ready\n`** (H101-221 worker-written) **and** `worker_pid` probe succeeds — worker **running** |
 | T3 | `harnessing run` shows **`Running`** (not `Exited`) — parent TERMINATION alone insufficient |
 | T4 | `stop-run` exit **0** (or documented in-progress receipt) |
 | T5 | Within **30s** after `stop-run`: `worker_pid` probe fails; `leader_pid` probe fails — **REAPING** |
