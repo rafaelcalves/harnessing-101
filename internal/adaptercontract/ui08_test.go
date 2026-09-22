@@ -17,11 +17,14 @@ func TestUI08_DetachedViewMutationProbe(t *testing.T) {
 	harnessDetachedSnapshotProbe(t, env)
 }
 
-// TestUI08_Phase3OperationsUnsupported covers StopRun/SetRunBudget only
-// (items 2/3). StartRun moved off this row in H101-144 (Phase 3 item 1):
-// it is UI-13's real-command case now, not UI-08's Unsupported case —
-// see cmd/harnessing's TestCLI_StartRun_* and
-// internal/core/task's TestStartRun_* for its actual contract.
+// TestUI08_Phase3OperationsUnsupported covers SetRunBudget only (item
+// 3). StartRun moved off this row in H101-144 (Phase 3 item 1); StopRun
+// moved off it the same way in H101-233 (Stanley): the throwaway
+// adapter now forwards stop-run through the caller-bound session
+// instead of manufacturing its own refusal, so its actual contract is
+// whatever Engine.StopRun/the real supervisor returns, not a fixed
+// Unsupported — see internal/adapters/process's TestSupervisor_Stop*
+// and internal/core/task/engine.go's StopRun for that contract.
 func TestUI08_Phase3OperationsUnsupported(t *testing.T) {
 	ctx := context.Background()
 	ops := []struct {
@@ -29,7 +32,6 @@ func TestUI08_Phase3OperationsUnsupported(t *testing.T) {
 		op   string
 		body map[string]string
 	}{
-		{name: "StopRun", op: "stop-run", body: map[string]string{"RequestID": "ui08-st", "RunID": "run1"}},
 		{name: "SetRunBudget", op: "set-run-budget", body: map[string]string{"RequestID": "ui08-bu", "RunID": "run1", "Budget": "1"}},
 	}
 	for _, tc := range ops {

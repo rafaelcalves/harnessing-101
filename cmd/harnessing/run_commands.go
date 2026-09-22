@@ -103,6 +103,45 @@ func runStartRun(args []string, stdout, stderr io.Writer) int {
 	})
 }
 
+func runStopRun(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("stop-run", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	wf := addWorkspaceFlags(fs)
+	caller := fs.String("caller", "", "agent ID invoking this command")
+	requestID := fs.String("request-id", "", "idempotency key for this command")
+	reason := fs.String("reason", "stopped", "reason for termination")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if fs.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "harnessing stop-run: exactly one runID argument is required")
+		return 1
+	}
+	runID := fs.Arg(0)
+	effectiveCaller := *caller
+	if effectiveCaller == "" {
+		effectiveCaller = ""
+	}
+	effectiveRequestID := *requestID
+	if effectiveRequestID == "" {
+		id, err := idsource.Random{}.NewID(context.Background())
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, err)
+			return 1
+		}
+		effectiveRequestID = id
+	}
+	return withSession(stderr, wf, domain.AgentID(effectiveCaller), "stop-run", func(ctx context.Context, session api.FrontendSession) int {
+		receipt, err := session.StopRun(ctx, api.StopRunRequest{RequestID: domain.RequestID(effectiveRequestID), RunID: runID, Reason: *reason})
+		if err != nil {
+			printCommandError(stderr, "stop-run", effectiveRequestID, err)
+			return 1
+		}
+		printReceipt(stdout, "stop-run", receipt)
+		return 0
+	})
+}
+
 // runRunQuery implements `harnessing run`: a read-only view of one run,
 // through FrontendSession.GetRun — the observation R2/D2 require be
 // reachable through the product surface, not just an internal state

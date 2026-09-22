@@ -62,6 +62,7 @@ type Capabilities interface {
 	AcknowledgeMessage(ctx context.Context, callerAgentID domain.AgentID, req task.AcknowledgeMessageRequest) (domain.Receipt, error)
 	ApproveProfile(ctx context.Context, callerAgentID domain.AgentID, req task.ApproveProfileRequest) (domain.Receipt, error)
 	StartRun(ctx context.Context, callerAgentID domain.AgentID, req task.StartRunRequest) (domain.Receipt, error)
+	StopRun(ctx context.Context, callerAgentID domain.AgentID, req api.StopRunRequest) (domain.Receipt, error)
 
 	// Delivery facts the mailbox adapter would record. The engine itself
 	// treats these as unauthenticated host facts (CallerScope{} today,
@@ -210,6 +211,10 @@ func (w *workspace) StartRun(ctx context.Context, callerAgentID domain.AgentID, 
 	return w.engine.StartRun(ctx, w.caller(callerAgentID), req)
 }
 
+func (w *workspace) StopRun(ctx context.Context, callerAgentID domain.AgentID, req api.StopRunRequest) (domain.Receipt, error) {
+	return w.engine.StopRun(ctx, w.caller(callerAgentID), req)
+}
+
 func (w *workspace) RecordMessagePublished(ctx context.Context, req task.MessageDeliveryRequest) (domain.Receipt, error) {
 	return w.engine.RecordMessagePublished(ctx, req)
 }
@@ -328,8 +333,11 @@ func (s *frontendSession) StartRun(ctx context.Context, req api.StartRunRequest)
 	return s.caps.StartRun(ctx, s.caller, req)
 }
 
-func (s *frontendSession) StopRun(context.Context, api.StopRunRequest) (domain.Receipt, error) {
-	return domain.Receipt{}, unsupportedPhase3("StopRun")
+func (s *frontendSession) StopRun(ctx context.Context, req api.StopRunRequest) (domain.Receipt, error) {
+	if s.caps == nil {
+		return domain.Receipt{}, unsupportedPhase3("StopRun")
+	}
+	return s.caps.StopRun(ctx, s.caller, req)
 }
 
 func (s *frontendSession) SetRunBudget(context.Context, api.SetRunBudgetRequest) (domain.Receipt, error) {

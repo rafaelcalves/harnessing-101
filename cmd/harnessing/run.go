@@ -96,6 +96,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runApproveProfile(args[1:], stdout, stderr)
 	case "start-run":
 		return runStartRun(args[1:], stdout, stderr)
+	case "stop-run":
+		return runStopRun(args[1:], stdout, stderr)
 	case "run":
 		return runRunQuery(args[1:], stdout, stderr)
 	case "run-output":

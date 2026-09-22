@@ -981,6 +981,93 @@ func startErrorCode(err error) string {
 	return string(domain.ErrSpawnFailed)
 }
 
+// StopRun requests termination of the adapter-owned process group and only
+// records Exited after the adapter establishes that the whole group is gone.
+// A parent exit alone is deliberately insufficient (H101-128/H101-209).
+func (e *Engine) StopRun(ctx context.Context, caller CallerScope, req api.StopRunRequest) (domain.Receipt, error) {
+	if req.RunID == "" {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "runID is required"}
+	}
+	if e.supervisor == nil {
+		return domain.Receipt{}, &domain.Error{Code: domain.ErrUnsupported, Detail: "no process supervisor is configured for this host"}
+	}
+	operationID := domain.OperationID(req.RunID + "-stop")
+	fp := fingerprint("StopRun", req.RunID, req.Reason)
+	receipt, err := e.commit(ctx, caller, req.RequestID, fp, func(snap *domain.Snapshot) ([]domain.Event, error) {
+		idx, run, found := findRun(snap, domain.RunID(req.RunID))
+		if !found {
+			return nil, &domain.Error{Code: domain.ErrNotFound, Detail: "run not found"}
+		}
+		if run.State == domain.RunExited {
+			return nil, &domain.Error{Code: domain.ErrConflict, Detail: "run already Exited"}
+		}
+		if run.State == domain.RunRecoveryRequired {
+			return nil, &domain.Error{Code: domain.ErrRecoveryRequired, Detail: "run requires recovery before termination"}
+		}
+		if run.AgentID != caller.AgentID {
+			return nil, &domain.Error{Code: domain.ErrDenied, Detail: "a caller may only stop its own run"}
+		}
+		now := e.clock.WallNow()
+		snap.Runs[idx].State = domain.RunStopping
+		snap.Operations = append(snap.Operations, domain.Operation{ID: operationID, RunID: run.ID, Kind: "StopRun", State: domain.OperationRunning, CreatedAt: now})
+		ev, err := e.event(ctx, "RunStopping", now, req.RunID)
+		if err != nil {
+			return nil, err
+		}
+		return []domain.Event{ev}, nil
+	})
+	if err != nil {
+		return receipt, err
+	}
+	receipt.OperationID = &operationID
+	stopErr := e.supervisor.Stop(ctx, domain.RunID(req.RunID), 2*time.Second)
+	outcomeID, idErr := e.ids.NewID(ctx)
+	if idErr != nil {
+		return receipt, idErr
+	}
+	_, commitErr := e.commit(ctx, CallerScope{}, domain.RequestID(outcomeID), fingerprint("StopRunOutcome", req.RunID, stopErr != nil), func(snap *domain.Snapshot) ([]domain.Event, error) {
+		idx, _, found := findRun(snap, domain.RunID(req.RunID))
+		if !found {
+			return nil, &domain.Error{Code: domain.ErrConflict, Detail: "run vanished before stop observation"}
+		}
+		now := e.clock.WallNow()
+		opIdx, _, opFound := findOperation(snap, operationID)
+		if stopErr != nil {
+			snap.Runs[idx].State = domain.RunRecoveryRequired
+			if opFound {
+				snap.Operations[opIdx].State = domain.OperationRecoveryRequired
+				snap.Operations[opIdx].CompletedAt = &now
+				snap.Operations[opIdx].Outcome = string(domain.ErrRecoveryRequired)
+			}
+			ev, err := e.event(ctx, "RunRecoveryRequired", now, req.RunID)
+			if err != nil {
+				return nil, err
+			}
+			return []domain.Event{ev}, nil
+		}
+		snap.Runs[idx].State = domain.RunExited
+		snap.Runs[idx].ExitedAt = &now
+		snap.Runs[idx].ExitReason = "stopped"
+		if opFound {
+			snap.Operations[opIdx].State = domain.OperationSucceeded
+			snap.Operations[opIdx].CompletedAt = &now
+			snap.Operations[opIdx].Outcome = "Stopped"
+		}
+		ev, err := e.event(ctx, "RunExited", now, req.RunID)
+		if err != nil {
+			return nil, err
+		}
+		return []domain.Event{ev}, nil
+	})
+	if commitErr != nil {
+		return receipt, commitErr
+	}
+	if stopErr != nil {
+		return receipt, stopErr
+	}
+	return receipt, nil
+}
+
 // GetRun is a read, not a command: no receipt, no idempotency ledger.
 func (e *Engine) GetRun(ctx context.Context, runID domain.RunID) (domain.Run, error) {
 	snap, err := e.store.Load(ctx, e.workspaceID)

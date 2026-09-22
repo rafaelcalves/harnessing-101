@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"time"
 )
 
@@ -50,6 +52,52 @@ func runFixtureParticipate(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "harnessing fixture: simulated failure: "+sim)
 		return 1
 	}
+	outputMode := os.Getenv("HARNESSING_FIXTURE_OUTPUT_MODE")
+	if outputMode == "worker_block" {
+		// H101-221: the parent's own worker_pid marker is written
+		// immediately after fork, before this process has done
+		// anything -- a routing hint only, never proof of a live
+		// worker. This exact 13-byte attestation, appended by the
+		// worker ITSELF only once it has actually reached its
+		// blocking state, is what a test may treat as worker-alive
+		// evidence, always together with a succeeding PID probe,
+		// never either alone.
+		if err := appendWorkerReady(); err != nil {
+			_, _ = fmt.Fprintln(stderr, "harnessing fixture: appending worker_ready: "+err.Error())
+			return 1
+		}
+		// H101-224: the cheapest possible shape for Stanley's
+		// pipe-holding versus pipe-closing distinction. "hold" (the
+		// default) is the existing behavior -- keep the inherited
+		// stdin/stdout/stderr open, so the adapter's copy goroutines
+		// never see EOF while this worker lives. "close" additionally
+		// closes all three inherited descriptors here, so those same
+		// copy goroutines DO see EOF (capture may complete) even
+		// though this process, and the run, are still alive.
+		if os.Getenv("HARNESSING_FIXTURE_WORKER_PIPE") == "close" {
+			_ = os.Stdin.Close()
+			_ = os.Stdout.Close()
+			_ = os.Stderr.Close()
+		}
+		for {
+			time.Sleep(time.Hour)
+		}
+	}
+	if outputMode == "fast_parent_idle_worker" {
+		worker, err := startFixtureWorker()
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, "harnessing fixture: spawning worker: "+err.Error())
+			return 1
+		}
+		if syncPath := os.Getenv("HARNESSING_FIXTURE_SYNC_FILE"); syncPath != "" {
+			marker := fmt.Sprintf("participated\npid=%d\nworker_pid=%d\n", os.Getpid(), worker.Pid)
+			if err := os.WriteFile(syncPath, []byte(marker), 0o600); err != nil {
+				_, _ = fmt.Fprintln(stderr, "harnessing fixture: writing sync file: "+err.Error())
+				return 1
+			}
+		}
+		return 0
+	}
 
 	contextPath := os.Getenv("HARNESSING_CONTEXT_FILE")
 	if contextPath == "" {
@@ -70,7 +118,6 @@ func runFixtureParticipate(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "harnessing fixture: writing participation marker: "+err.Error())
 		return 1
 	}
-	outputMode := os.Getenv("HARNESSING_FIXTURE_OUTPUT_MODE")
 	if outputMode != "serve_release_both_channels" {
 		// Suppressed for serve_release_both_channels only: item 5's I3/
 		// I4/I5 evidence needs the two named channel literals to be the
@@ -83,7 +130,24 @@ func runFixtureParticipate(args []string, stdout, stderr io.Writer) int {
 	if outputMode == "prefix_then_block" {
 		_, _ = fmt.Fprintln(stdout, "fixture-out-1")
 	}
-	if syncPath := os.Getenv("HARNESSING_FIXTURE_SYNC_FILE"); syncPath != "" {
+	if outputMode == "spawn_worker_then_block" || outputMode == "parent_exits_worker_survives" {
+		worker, err := startFixtureWorker()
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, "harnessing fixture: spawning worker: "+err.Error())
+			return 1
+		}
+		if syncPath := os.Getenv("HARNESSING_FIXTURE_SYNC_FILE"); syncPath != "" {
+			marker := fmt.Sprintf("participated\npid=%d\nworker_pid=%d\n", os.Getpid(), worker.Pid)
+			if err := os.WriteFile(syncPath, []byte(marker), 0o600); err != nil {
+				_, _ = fmt.Fprintln(stderr, "harnessing fixture: writing sync file: "+err.Error())
+				return 1
+			}
+		}
+		if outputMode == "parent_exits_worker_survives" {
+			return waitForParentRelease(stderr)
+		}
+	}
+	if syncPath := os.Getenv("HARNESSING_FIXTURE_SYNC_FILE"); syncPath != "" && outputMode != "spawn_worker_then_block" && outputMode != "parent_exits_worker_survives" {
 		marker := fmt.Sprintf("participated\npid=%d\n", os.Getpid())
 		if outputMode == "prefix_then_block" {
 			marker += "prefix-ready\n"
@@ -112,6 +176,77 @@ func runFixtureParticipate(args []string, stdout, stderr io.Writer) int {
 	}
 	time.Sleep(sleep)
 	return 0
+}
+
+func waitForParentRelease(stderr io.Writer) int {
+	releasePath := os.Getenv("HARNESSING_FIXTURE_PARENT_RELEASE_FILE")
+	if releasePath == "" {
+		_, _ = fmt.Fprintln(stderr, "harnessing fixture: HARNESSING_FIXTURE_PARENT_RELEASE_FILE is not set")
+		return 1
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		data, err := os.ReadFile(releasePath)
+		if err == nil && string(data) == "parent-release\n" {
+			return 0
+		}
+		if time.Now().After(deadline) {
+			_, _ = fmt.Fprintln(stderr, "harnessing fixture: no valid parent release within 30s")
+			return 1
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func startFixtureWorker() (*os.Process, error) {
+	cmd := exec.Command(os.Args[0], "__fixture-participate")
+	cmd.Env = append(os.Environ(), "HARNESSING_FIXTURE_OUTPUT_MODE=worker_block")
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return cmd.Process, nil
+}
+
+// workerReadyToken is H101-221's exact 13-byte worker-written
+// attestation. Not the parent's own worker_pid routing hint (written
+// immediately after fork, before the worker has done anything) — this
+// is written by the worker process itself, only once it has actually
+// reached its blocking state, and is the ONLY thing a test may treat
+// as worker-alive evidence, always together with a succeeding PID
+// probe, never either alone.
+const workerReadyToken = "worker_ready\n"
+
+// appendWorkerReady waits for the PARENT's own routing-hint write to
+// land before appending. The parent's marker write (os.WriteFile,
+// which truncates) and this worker's own process start are two
+// independent processes racing after the same fork -- appending
+// before the parent's write lands would have that later truncating
+// write silently erase this attestation. Polling for the parent's
+// known "worker_pid=" substring first makes the ordering
+// deterministic without needing a separate synchronization file.
+func appendWorkerReady() error {
+	syncPath := os.Getenv("HARNESSING_FIXTURE_SYNC_FILE")
+	if syncPath == "" {
+		return nil
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		data, err := os.ReadFile(syncPath)
+		if err == nil && bytes.Contains(data, []byte("worker_pid=")) {
+			break
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("parent's own sync-file write never appeared within 30s")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	f, err := os.OpenFile(syncPath, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	_, err = f.WriteString(workerReadyToken)
+	return err
 }
 
 // releaseToken is the exact byte sequence H101-199's QA-defined release

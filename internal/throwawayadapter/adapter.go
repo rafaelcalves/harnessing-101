@@ -152,6 +152,13 @@ func (a *Adapter) dispatch(ctx context.Context, envelope Envelope) (interface{},
 		}
 		return a.session.StartRun(ctx, req)
 	case "stop-run":
+		// Forward stop through the caller-bound session; the host
+		// determines supervision availability and authority (Stanley,
+		// H101-233). Detach ends this client's attachment, not the
+		// continuing host's capability -- Engine.StopRun itself already
+		// returns Unsupported when no supervisor is configured, and that
+		// result is preserved rather than replaced with one manufactured
+		// here.
 		var req api.StopRunRequest
 		if err := decode(&req); err != nil {
 			return nil, invalidPayload()
