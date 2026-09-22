@@ -407,6 +407,14 @@ on reopen; **H101-185 unblocked** (one card). Ruling:
 [`h101-186-item4-d2-b5-ruling.md`](h101-186-item4-d2-b5-ruling.md). Architecture:
 [`h101-187-running-recovery-ownership.md`](../architecture/h101-187-running-recovery-ownership.md).
 
+### H101-188 — Item 4 D2 discharged (2026-09-22)
+
+**D2 SATISFIED** at `b764691` (`TestCLI_RunningDeadChildReconcilesToRecoveryRequired`,
+H101-184 B1–B4 + B5′, S2–S6 + S9). Layer A + reconcile expectation updates **sound**
+(H101-187 behaviour, not regression). **R8:** CI-only until both ADR targets green.
+**Item 4 still NOT SATISFIED** (D4 open). D4 bar before dispatch. Ruling:
+[`h101-188-phase3-item4-d2-discharge-ruling.md`](h101-188-phase3-item4-d2-discharge-ruling.md).
+
 ---
 
 ### Item 5 — Real run output journal
