@@ -90,4 +90,16 @@ At `2b76d80`: **NOT SATISFIED.** H101-170 minimal slice **accepted**; next gap
 for item 4 progress is **CLI-visible `RecoveryRequired` after real crash** (E2 +
 D6), then Running-with-dead-child (D2), then output-gap honesty (D4).
 
+---
+
+## Postscript — engine.go comment (god `2026-09-22T10-40-38-483Z-4d9aa1`)
+
+The tab re-indent on `reconcileStuckRun`'s existing doc comment was an accidental
+edit, not the intended invariant. **No `engine.go` comment is required or desired.**
+
+The recorded limit lives **only** in this ruling and the H101-180 criteria standing
+section — consistent with H101-180's acceptance-only boundary. `cfc8468` commit
+message already states the engine edit was excluded; ruling body and criteria text
+do not assert an in-repo engine comment.
+
 Authored by Kelly (QA), H101-180.
