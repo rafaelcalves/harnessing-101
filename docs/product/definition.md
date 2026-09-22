@@ -149,6 +149,8 @@ This wording describes the intended participation paths, not their current avail
 
 “Messages wait in this agent's mailbox until its session checks in. Registration does not wake an idle conversation or guarantee a reply. Ask the session to check for messages when you want it to resume.”
 
+**When reconnection is needed (H101-204 / H101-205):** “This session needs reconnection before it can acknowledge messages or update work through Harnessing 101. Pending messages and assigned work remain. Reconnect this session, replace it, or disconnect it to release its reservation. The external tool may still be running.”
+
 A live connector, queued delivery or a successful poll is not acknowledgement or evidence of work. Acknowledgement remains an explicit action by the participating session. Instructions to check at turn boundaries do not guarantee that an idle model will act; automatic wake is not part of this initial promise.
 
 “A participation profile describes the session you connect. It does not approve launching a program or verify the tool's identity.”
@@ -163,6 +165,24 @@ Human acceptance, explicit authority, unverified-content disclosures and approva
 
 **Evidence boundary:** [Kelly's H101-172 ruling](../quality/h101-172-layerb-registration-ruling.md) places registered external sessions outside Phase 3 item 1's Layer B managed-start evidence. Registration does not discharge that obligation or demonstrate Claude Code compatibility by itself. This amendment changes no acceptance criteria or protocol.
 
-### Scope still to be settled
+### Recovering a stale or disconnected session (H101-204 / H101-205)
 
-H101-174 asks whether the current delivery scope is attachment first, with managed-launch participation deferred, or both paths. Either answer preserves the distinction above. Revisit the delivery sequence and availability wording when that decision is recorded; do not infer that both paths must ship together, or that attachment cancels managed-launch obligations without an explicit scope decision. Stanley owns the participation protocol and Kelly owns its evidence requirements. This amendment authorizes no graphical interface or expansion of agent-orchestrator authority.
+**Product ruling — 2026-09-22: owner-directed work, not implemented.** A stale or disconnected session is a normal connection state needing attention, not evidence of a dead agent or a failed task. Show “Session needs reconnection,” the underlying Stale or Disconnected reason, the affected agent and session, and last connector contact—not last agent activity. Explain that the session's slot stays reserved and blocks another session or a managed start.
+
+Preserve task status, ownership, pending messages and recorded results. Do not mark work Blocked merely because its connection needs attention. An idle, valid session can check in; a stale or disconnected session must first restore authorization. Neither staleness nor an idle session proves process death, model attention or work completion.
+
+The user has three distinct recovery choices. These are user-facing names, not command specifications:
+
+- **Reconnect session:** restore the same conversation through the required revalidation or pairing. Reconnect must never silently mean replace.
+- **Replace connected session:** connect a different conversation through an explicit user choice. Explain: “This removes the old session's permission to update this agent's workspace records. It does not stop that program. Assigned work, messages and history stay with this agent.” Do not require proof that the old process died.
+- **Disconnect session:** close the registration without replacing it, releasing its reservation. This does not stop the external tool or clear a managed run's separate recovery restriction. Removing a registration must never mean retiring the agent.
+
+A failed recovery must leave the remaining condition and next action visible rather than imply the slot is free. No timeout or silence automatically releases the reservation or authorizes takeover.
+
+Surface the condition in ordinary command-line use: agent/workspace status and relevant task views show the notice when observed; a denied mutation or conflicting registration/start explains the condition and recovery choices. Keep the unresolved condition visible without repeatedly interrupting unrelated work with confirmation prompts. Before pairing, disclose that an interrupted session may retain its reservation until the user reconnects, replaces or disconnects it.
+
+A closed terminal with no subsequent user interaction cannot be promised a visible alert. No new desktop notification, automatic wake or background channel is requested. The availability cost is accepted with explicit recovery; an invisible reservation or no supported user recovery would not be a usable attachment experience. Kelly owns testable acceptance requirements; this ruling changes no protocol or criteria.
+
+### Current delivery scope
+
+**H101-174 owner decision:** attachment first; delivery of both attachment and managed-launch participation is deferred to the near-future backlog, not cancelled. The [registration specification](../architecture/h101-171-session-registration-protocol.md) records the scope decision. Existing managed-start obligations are not discharged by registration; Kelly owns their gate disposition. Revisit delivery sequence and availability wording when the deferred path is authorized and demonstrated. Stanley owns the participation protocol. This amendment authorizes no graphical interface or expansion of agent-orchestrator authority.
