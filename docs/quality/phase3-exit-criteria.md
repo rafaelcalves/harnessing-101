@@ -387,9 +387,17 @@ line + SIGKILL). Decision table R1–R9. Full spec:
 ### H101-183 — Item 4 E2/D6 discharged (2026-09-22)
 
 **E2 SATISFIED. D6 SATISFIED** at `21c782e` (`TestCLI_RecoveryRequiredAfterRealStartRunCrash`,
-H101-182 A1–A5, R3–R7). Both ADR targets via CI job pattern when green; local verify
-darwin/arm64 this session. **Item 4 still NOT SATISFIED** (D2, D4 open). Ruling:
+H101-182 A1–A5, R3–R7). **R8:** both ADR targets — CI SUCCESS on `21c782e` observed
+(H101-183 upgrade). **Item 4 still NOT SATISFIED** (D2, D4 open). Ruling:
 [`h101-183-phase3-item4-e2-d6-discharge-ruling.md`](h101-183-phase3-item4-e2-d6-discharge-ruling.md).
+
+### H101-184 — Item 4 D2 acceptance spec (2026-09-22)
+
+D2 engineering blocked until this spec lands. **Running + dead child →
+`RecoveryRequired` on next `harnessing run`**, not stuck `Running` (h101-128 lines
+69–71). Reuse participation fixture + PID sync + controller SIGKILL; **not**
+`block_after_marker` (E2 window). Full spec:
+[`h101-184-item4-d2-acceptance-spec.md`](h101-184-item4-d2-acceptance-spec.md).
 
 ---
 

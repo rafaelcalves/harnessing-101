@@ -46,13 +46,12 @@ Acceptable adaptation; documented in `fixture_participate.go`.
 
 ## (3) R8 cross-target limit
 
-**SATISFIED on both ADR targets** when CI `build-test-lint` (ubuntu) and
-`darwin-arm64` (macos-14) jobs are green — same pattern as Layer A CLI tests.
-Test skips only Windows (H101-103 out-of-scope), not an in-scope target.
+**SATISFIED on both ADR targets** — upgraded 2026-09-22 (god `conv-2856a3`).
+CI run on `21c782e` observed **SUCCESS** on both jobs (ubuntu + macos-14). Same
+upgrade shape as Q1 darwin milestone: condition written, green run arrived, Kelly
+records discharge — not pending.
 
-Local verification this session: **darwin/arm64 only**. Kelly has not observed
-a CI run number for `21c782e`; discharge on linux/amd64 rests on the standard
-CI job pattern, not a manifest disclosure.
+Local verification: darwin/arm64. linux/amd64 via CI observation, not manifest.
 
 ---
 
