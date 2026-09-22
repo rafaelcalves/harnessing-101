@@ -322,6 +322,15 @@ Full amendment authority: Angela H101-146 / owner H101-142. Ruling:
 | D4 | Stop only kills parent, leaves child worker running | **Product** | Tree termination |
 | D5 | Test asserts exit from mock without spawning real child | **Test** | Insufficient for item 2 — mock OK only for adaptercontract **error-path** rows, not this item's termination proof |
 
+### H101-209 — Item 2 acceptance spec (2026-09-22)
+
+Item 2 engineering blocked until this spec commits. **New producers required:**
+`spawn_worker_then_block` + `parent_exits_worker_survives` (none of the five existing
+fixture modes suffice). Serve-owned start/stop; PID-probe positive artefact for tree
+gone (worker_pid marker). Stanley h101-128 sufficient — no new behaviour card unless
+implementation finds a gap. H101-173: no unblock/restart in scope. Full spec:
+[`h101-209-item2-acceptance-spec.md`](h101-209-item2-acceptance-spec.md).
+
 ---
 
 ### Item 3 — Hard budget enforcement
