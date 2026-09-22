@@ -322,6 +322,14 @@ Full amendment authority: Angela H101-146 / owner H101-142. Ruling:
 | D4 | Stop only kills parent, leaves child worker running | **Product** | Tree termination |
 | D5 | Test asserts exit from mock without spawning real child | **Test** | Insufficient for item 2 — mock OK only for adaptercontract **error-path** rows, not this item's termination proof |
 
+### H101-224 — Natural exit finalization acceptance spec (2026-09-22)
+
+Blocks adapter natural-reap work per h101-222 (`d4c9e4f`). Capture ≠ run complete;
+mode B pipe hold/close; membership predicate not `groupExists` alone; Layer B recorder
+for uncertain absence. Item 5 unchanged (`6c62a3e`). One new worker env
+(`WORKER_PIPE=close`). Full spec:
+[`h101-224-natural-exit-finalization-acceptance-spec.md`](h101-224-natural-exit-finalization-acceptance-spec.md).
+
 ### H101-217 — Stop identity binding acceptance spec (2026-09-22)
 
 H101-218 (Kevin) blocked until this bar commits. Retained-leader `waitid`/`WNOWAIT`
