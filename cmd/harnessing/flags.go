@@ -69,6 +69,7 @@ type workspaceFlags struct {
 	root      *string
 	id        *string
 	reviewers agentIDList
+	attach    *bool
 }
 
 func addWorkspaceFlags(fs *flag.FlagSet) *workspaceFlags {
@@ -76,13 +77,20 @@ func addWorkspaceFlags(fs *flag.FlagSet) *workspaceFlags {
 	wf.root = fs.String("workspace", "", "path to the workspace root (required)")
 	wf.id = fs.String("workspace-id", "default", "workspace identifier stored alongside state")
 	fs.Var(&wf.reviewers, "reviewer", "agent ID with human-review authority for this invocation (repeatable)")
+	wf.attach = fs.Bool("attach", false, "attach to a live 'harnessing serve' host at -workspace as a fresh reader/writer session, instead of opening the workspace directly (H101-193/H101-195)")
 	return wf
 }
 
-// withSession opens the workspace through the trusted composition root, binds
-// the caller once, runs fn with only the neutral session, and closes the
-// workspace before returning.
+// withSession runs fn against one command's session, either by opening
+// the workspace directly through the trusted composition root
+// (default) or, when -attach is set, by joining a continuing
+// `harnessing serve` host at the same root as a fresh attached session
+// — never a second competing workspace open. Either way fn sees only
+// the same neutral api.FrontendSession shape.
 func withSession(stderr io.Writer, wf *workspaceFlags, caller domain.AgentID, cmdName string, fn func(ctx context.Context, session api.FrontendSession) int) int {
+	if wf.attach != nil && *wf.attach {
+		return assembly.WithAttachedSession(context.Background(), stderr, *wf.root, caller, cmdName, fn)
+	}
 	return assembly.WithSession(stderr, *wf.root, domain.WorkspaceID(*wf.id), []domain.AgentID(wf.reviewers), caller, cmdName, fn)
 }
 

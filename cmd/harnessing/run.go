@@ -26,7 +26,8 @@ Usage:
   harnessing approve-profile -workspace <dir> [-reviewer <id>]... -caller <id> -request-id <id> -profile-id <id> -tool-executable <path> [-tool-argv-json <json>]
   harnessing start-run    -workspace <dir> [-workspace-id <id>] [-caller <id>] [-request-id <id>] -run <id> -agent <id> -profile-id <id> [-task <id>] [-tool-executable <path>] [-tool-argv-json <json>]
   harnessing run          -workspace <dir> [-workspace-id <id>] <runID>
-  harnessing run-output   -workspace <dir> [-workspace-id <id>] <runID>
+  harnessing run-output   -workspace <dir> [-workspace-id <id>] [-attach] <runID> [-after-offset <n>] [-byte-limit <n>]
+  harnessing events       -workspace <dir> [-workspace-id <id>] [-attach] [-after-cursor <cursor>]
   harnessing operation    -workspace <dir> [-workspace-id <id>] <operationID>
 
 Every command other than version opens a workspace through the trusted
@@ -35,6 +36,11 @@ other path to the store. The
 reviewer set is supplied here, by you, on the command line — never read
 from anything already in the workspace. -caller is who is invoking the
 command; the engine, not this tool, decides what that caller may do.
+
+-attach, where offered, joins a live 'harnessing serve' host at -workspace
+as a fresh reader/writer session instead of opening the workspace directly
+— a second command touching a run a continuing host is supervising, not a
+second competing owner.
 `
 
 // disclosure is intentionally printed on every invocation. A workspace file
@@ -94,6 +100,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runRunQuery(args[1:], stdout, stderr)
 	case "run-output":
 		return runRunOutputQuery(args[1:], stdout, stderr)
+	case "events":
+		return runEventsQuery(args[1:], stdout, stderr)
 	case "operation":
 		return runOperationQuery(args[1:], stdout, stderr)
 	case "__fixture-participate":

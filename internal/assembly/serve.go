@@ -101,3 +101,32 @@ func serve(ctx context.Context, stderr io.Writer, root string, workspaceID domai
 func Attach(ctx context.Context, root string, caller domain.AgentID) (*transport.Client, error) {
 	return transport.Attach(ctx, root, idsource.Random{}, caller)
 }
+
+// WithAttachedSession is WithSession's counterpart for a client joining
+// a continuing `harnessing serve` host rather than opening the
+// workspace itself: Attach, run fn against the same api.FrontendSession
+// shape every command already targets, Detach. This is H101-193/
+// H101-195's shared plumbing — a fresh reader attaching to the SAME
+// serve owner, never a second competing workspace open — used by any
+// command whose caller passes -attach. It carries no reviewers/
+// workspace-ID parameter: those are fixed by whichever `harnessing
+// serve` already owns this root.
+func WithAttachedSession(ctx context.Context, stderr io.Writer, root string, caller domain.AgentID, cmdName string, fn func(context.Context, api.FrontendSession) int) int {
+	if root == "" {
+		_, _ = fmt.Fprintf(stderr, "harnessing %s: -workspace is required\n", cmdName)
+		return 1
+	}
+	client, err := Attach(ctx, root, caller)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "harnessing %s: %s\n", cmdName, describeError(err))
+		return 1
+	}
+	code := fn(ctx, client)
+	if detachErr := client.Detach(ctx); detachErr != nil {
+		_, _ = fmt.Fprintf(stderr, "harnessing %s: session did not detach cleanly: %s\n", cmdName, describeError(detachErr))
+		if code == 0 {
+			return 1
+		}
+	}
+	return code
+}

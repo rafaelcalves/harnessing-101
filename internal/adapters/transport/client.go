@@ -278,11 +278,28 @@ func (c *Client) ResolveRequest(ctx context.Context, id domain.RequestID) (domai
 	return out, err
 }
 
-// Subscribe is deliberately unimplemented over this transport this card:
-// a live event channel needs a streaming carrier (or a journal to poll),
-// and that belongs to item 5 (output), not item 6's minimal attach/detach
-// claim. Callers get an explicit, typed Unsupported error rather than a
-// channel that silently never delivers anything.
+// Subscribe over this file-based request/response transport is a
+// single bounded batch, not a live stream: it asks the host's real
+// Subscribe (H101-61's event bus, running in-process on the serve
+// side) for whatever it can deliver within its own short drain window
+// (dispatch.go's subscribeDrainWindow), then returns those events on
+// an already-closed channel. This is enough for a fresh reader to
+// prove the shipped state-event path — item 5's I6 (H101-193) — but a
+// caller wanting continuous delivery must call Subscribe again with a
+// later cursor; there is no live push here, and pretending otherwise
+// would be exactly the kind of manufactured certainty H101-195
+// forbids.
 func (c *Client) Subscribe(ctx context.Context, filter string) (<-chan domain.Event, error) {
-	return nil, &domain.Error{Code: domain.ErrUnsupported, Detail: "Subscribe is not carried over the file transport in this card (item 6); see item 5"}
+	events := make([]domain.Event, 0)
+	if err := c.call(ctx, "Subscribe", struct {
+		AfterCursor string `json:"afterCursor"`
+	}{filter}, &events); err != nil {
+		return nil, err
+	}
+	ch := make(chan domain.Event, len(events))
+	for _, ev := range events {
+		ch <- ev
+	}
+	close(ch)
+	return ch, nil
 }

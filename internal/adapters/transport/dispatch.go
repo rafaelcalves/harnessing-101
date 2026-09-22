@@ -3,10 +3,17 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/rafaelcalves/harnessing-101/internal/api"
 	"github.com/rafaelcalves/harnessing-101/internal/core/domain"
 )
+
+// subscribeDrainWindow bounds how long the "Subscribe" operation below
+// waits for events before answering — see its own doc comment for why
+// this is a single bounded batch, not a live stream, over this
+// request/response transport.
+const subscribeDrainWindow = 200 * time.Millisecond
 
 // Dispatch decodes one Envelope's Payload against the api.FrontendSession
 // method its Operation names, calls it, and re-encodes the result or
@@ -169,6 +176,39 @@ func dispatch(ctx context.Context, session api.FrontendSession, envelope Envelop
 		return session.GetOperation(ctx, req.OperationID)
 	case "GetSnapshot":
 		return session.GetSnapshot(ctx)
+	case "Subscribe":
+		// H101-193's I6 negative needs a real shipped state-event read
+		// path for an attached reader, not a live continuous stream
+		// (this file-based request/response transport has no natural
+		// carrier for that yet — see Client.Subscribe's own doc
+		// comment). This drains whatever the host's real, in-process
+		// Subscribe delivers within a short bounded window and returns
+		// it as one batch; a caller wanting more polls again with the
+		// last event's cursor equivalent (WorkspaceRevision).
+		var req struct {
+			AfterCursor string `json:"afterCursor"`
+		}
+		if err := decode(&req); err != nil {
+			return nil, err
+		}
+		drainCtx, cancel := context.WithTimeout(ctx, subscribeDrainWindow)
+		defer cancel()
+		ch, err := session.Subscribe(drainCtx, req.AfterCursor)
+		if err != nil {
+			return nil, err
+		}
+		events := make([]domain.Event, 0)
+		for {
+			select {
+			case ev, ok := <-ch:
+				if !ok {
+					return events, nil
+				}
+				events = append(events, ev)
+			case <-drainCtx.Done():
+				return events, nil
+			}
+		}
 	case "ResolveRequest":
 		var req struct {
 			RequestID domain.RequestID `json:"requestID"`
@@ -178,11 +218,8 @@ func dispatch(ctx context.Context, session api.FrontendSession, envelope Envelop
 		}
 		return session.ResolveRequest(ctx, req.RequestID)
 	default:
-		// Subscribe is deliberately absent: it returns a channel, not a
-		// value, and this card does not carry a live event stream over
-		// the file transport (see Client.Subscribe). attach/detach are
-		// handled one level up, before a request ever reaches Dispatch,
-		// so they are not cases here either.
+		// attach/detach are handled one level up, before a request ever
+		// reaches Dispatch, so they are not cases here.
 		return nil, &domain.Error{Code: domain.ErrInvalidArgument, Detail: "unknown or unsupported operation: " + envelope.Operation}
 	}
 }

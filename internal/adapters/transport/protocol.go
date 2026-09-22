@@ -8,11 +8,12 @@
 // already returned — this package invents no new authority and performs
 // no domain mutation of its own.
 //
-// Scope for this card: framing, the request/response file protocol, and
-// attach/detach. It deliberately does NOT attempt to carry a live
-// Subscribe event stream or run output over this transport yet — see
-// Client.Subscribe's doc comment. That is output-shaped work item 5
-// owns, not this card's minimal attach/detach claim.
+// Scope for this card (H101-136): framing, the request/response file
+// protocol, and attach/detach. Output reads (ReadOutput) and state
+// events (Subscribe) are item 5's own extension of this same transport
+// (H101-193/H101-195): Subscribe is carried as a single bounded batch
+// per request, not a live continuous stream — see Client.Subscribe's
+// doc comment for why and for the resulting limit.
 package transport
 
 import (

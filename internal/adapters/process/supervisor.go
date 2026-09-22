@@ -123,7 +123,31 @@ func (s *Supervisor) Start(ctx context.Context, runID domain.RunID, spec domain.
 		return &domain.Error{Code: domain.ErrSpawnFailed, Detail: "process exited immediately with no participation signal: " + truncate(combined.String())}
 	case <-time.After(StartupWindow):
 		// Still running past the bounded window: a healthy long-lived
-		// participant. Leave it running, unowned by this call.
+		// participant. Leave it running, unowned by this call — but do
+		// not abandon `done`: h101-128 line 79 requires draining both
+		// channels before Finish(Complete) on graceful completion, and
+		// os/exec's own Wait() already blocks until the stdout/stderr
+		// copy goroutines above finish, so by the time it returns here
+		// every byte is already durably appended. This goroutine only
+		// gets to actually observe that later exit when the PROCESS
+		// running this call outlives the child long enough to see it —
+		// true for a continuing `harnessing serve` host, never true for
+		// a one-shot CLI command (which exits within a few ms of this
+		// return, taking any goroutine with it). That lifetime
+		// difference, not a mode flag, is what makes graceful-complete
+		// capture serve-owned (H101-195): no fixture-aware branching
+		// here, no exit-code exception to the fast-exit classification
+		// above.
+		if s.Journal != nil {
+			go func() {
+				waitErr := <-done
+				status := domain.CaptureComplete
+				if waitErr != nil {
+					status = domain.CaptureInterrupted
+				}
+				_ = s.Journal.Finish(context.Background(), runID, status)
+			}()
+		}
 		return nil
 	}
 }
