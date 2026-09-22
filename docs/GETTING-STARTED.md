@@ -5,8 +5,9 @@ identities and one human reviewer. You will assign work, record a handoff,
 acknowledge it, record and resolve a blocker, reject and replace a result, and
 accept the replacement.
 
-The workflow was run against commit `f2d99fb` on 2026-09-21. Every documented
-step completed with the output shown below.
+The manual workflow was run against commit `f2d99fb` on 2026-09-21. The Layer B
+preflight was run against `29fd50e` on 2026-09-22. Each produced the output
+described below.
 
 ## What this guide does—and does not—connect
 
@@ -366,12 +367,85 @@ Message msg-1
   Recorded by: agent-one (claimed sender, command, unverified)
 ```
 
+## 9. Run the Layer B owner preflight
+
+Layer B is the real-tool trial: the product, rather than a shell script, must
+start an approved agent tool and record authoritative participation and task
+completion. The current product cannot complete that trial yet. This preflight
+records exactly where it stops without treating tool output as proof of work.
+
+Before running it, install and authenticate Claude Code yourself and confirm
+that `claude --version` succeeds. Harnessing 101 and this runner never install a
+tool, sign in, change credentials, or change provider configuration.
+
+From the repository root, after building `./bin/harnessing` and completing the
+workspace setup and human assignment above, run:
+
+```sh
+python3 scripts/run-agentic-cli-cycle.py \
+  --descriptor scripts/agentic-cli-manifests/claude-code.json \
+  --harnessing ./bin/harnessing \
+  --workspace "$WORKSPACE" \
+  --workspace-id demo \
+  --task-id task-1 \
+  --agent-id agent-one \
+  --peer-id agent-two \
+  --profile-id approved-claude-profile \
+  --run-id run-1 \
+  --product-revision "$(git rev-parse --short HEAD)" \
+  --report "$WORKSPACE/claude-code-layer-b.json"
+EXIT_CODE=$?
+printf 'exit status: %s\n' "$EXIT_CODE"
+```
+
+All flags shown are required. A relative `--harnessing` path such as
+`./bin/harnessing` is supported; the runner resolves it before probing the
+product. The report path may name a file that does not exist, but its parent
+directory must already exist.
+
+With the current shipped command, the runner performs Claude Code's version
+probe, writes the report, and prints JSON whose stable outcome is:
+
+```json
+{
+  "message": "the shipped harnessing command has no managed start-run surface; a manual shell start would not be Layer B evidence",
+  "result": "product_surface_unavailable"
+}
+```
+
+The JSON also records the exact tool version, operating system, product
+revision, descriptor digest, workspace/task/agent/profile/run identifiers, and
+planned human interventions. Paths, versions, and operating-system text vary by
+machine. The final shell line is:
+
+```text
+exit status: 24
+```
+
+Exit 24 is expected today because `harnessing help` has no managed `start-run`
+surface. H101-144 is the implementation work for that missing surface. The
+runner does **not** fall back to launching Claude Code directly, because a manual
+shell launch cannot prove product-managed participation or completion.
+
+The other version-2 descriptors are explicit owner deferrals:
+
+- `scripts/agentic-cli-manifests/codex.json` returns `owner_deferred` with exit
+  19.
+- `scripts/agentic-cli-manifests/cursor-agent.json` returns `owner_deferred`
+  with exit 19.
+
+Those descriptors have no approved invocation shape. The runner records the
+deferral and does not look up, version-probe, authenticate, or launch Codex or
+Cursor Agent. Replace the Claude descriptor in the command only if you want to
+record that expected deferral; it is not a tool trial.
+
 ## What is written on disk
 
 Everything is below the directory passed to `-workspace`:
 
 ```text
 getting-started.<random>/
+├── claude-code-layer-b.json
 ├── state.json
 └── mailbox/
     └── agent-two/
@@ -383,6 +457,9 @@ getting-started.<random>/
 - `state.json` holds the workspace snapshot and request receipts used for
   idempotent replay. It includes tasks, results, registered identities, messages,
   delivery facts, and acknowledgements. Use the CLI rather than editing it.
+- `claude-code-layer-b.json` is the Layer B preflight report from step 9. It is
+  evidence about the attempted trial, not proof that an agent participated or
+  completed work.
 - `mailbox/<recipient>/inbox/` is the local delivery queue. A processed envelope
   moves to `archive/`; it can move too quickly to observe in `inbox/` during this
   walkthrough.
