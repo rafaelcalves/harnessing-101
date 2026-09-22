@@ -29,6 +29,24 @@ import (
 // reported as Running.
 func runFixtureParticipate(args []string, stdout, stderr io.Writer) int {
 	if sim := os.Getenv("HARNESSING_FIXTURE_SIMULATE"); sim != "" {
+		if sim == "block_after_marker" {
+			// Supervisor captures child stdout internally, so the native CLI
+			// crash proof uses this explicit external sync artifact while
+			// retaining the same start-called stdout convention.
+			_, _ = fmt.Fprintln(stdout, "start-called")
+			syncPath := os.Getenv("HARNESSING_FIXTURE_SYNC_FILE")
+			if syncPath == "" {
+				_, _ = fmt.Fprintln(stderr, "harnessing fixture: HARNESSING_FIXTURE_SYNC_FILE is not set")
+				return 1
+			}
+			if err := os.WriteFile(syncPath, []byte(fmt.Sprintf("start-called\npid=%d\n", os.Getpid())), 0o600); err != nil {
+				_, _ = fmt.Fprintln(stderr, "harnessing fixture: writing sync file: "+err.Error())
+				return 1
+			}
+			for {
+				time.Sleep(time.Hour)
+			}
+		}
 		_, _ = fmt.Fprintln(stderr, "harnessing fixture: simulated failure: "+sim)
 		return 1
 	}
