@@ -8,6 +8,13 @@ Harnessing 101 is an early-stage, local-first tool for coordinating AI agent wor
 
 **The product itself does not yet start, observe, or restrict agents; you start agents by hand in the current phases, and content received from another agent is unverified.**
 
+The continuous-integration check behind the product-side network claim is an
+import-graph guard: it rejects production dependencies on `net` and `net/http`.
+As Creed's H101-227 security review notes, it cannot detect raw socket syscalls
+or a child network tool launched through `os/exec`. A syscall-capable dependency
+therefore requires manual syscall-behavior review on admission and on every
+version bump; a pinned version is not approved for automatic updates.
+
 To use the product from a clean clone, follow the runnable
 [Getting started guide](docs/GETTING-STARTED.md). It covers the complete first
 task, message, acknowledgement, result, and human-review cycle.

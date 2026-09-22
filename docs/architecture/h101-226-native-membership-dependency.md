@@ -77,7 +77,12 @@ Before admission, god should obtain the owner's dependency scope decision, then:
 - Keep imports in the process adapter's platform files. Preserve existing import
   containment and no-network gates; run them on both target dependency graphs.
   The inspected scripts do not ban every external module, but that is not a
-  substitute for dependency approval.
+  substitute for dependency approval. Per Creed's H101-227 security review,
+  `check-no-network.sh` sees literal `net` and `net/http` imports but not raw
+  socket syscalls. This admission and every future version bump of `x/sys` or
+  another syscall-capable dependency require manual syscall-behavior review;
+  do not treat a pin, semantic version, or automated update as carrying the
+  review forward.
 - Record licence notices, resolved transitive/build requirements and maintenance
   responsibility with the process-adapter owner; pin upgrades require review.
 - Validate native membership, uncertainty, survivor and natural-completion cases

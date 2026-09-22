@@ -34,6 +34,13 @@ not repeat their proof unless a Phase 3 change regresses them:
 | Supported targets `linux/amd64` + `darwin/arm64` | ADR 0001 H101-50 |
 | Windows out-of-scope exclusion smoke | H101-103 — compile-only guard; **not** in-scope partial satisfaction |
 
+**Inherited gate limit (Creed, H101-227):** “Zero network” here names the
+production import-graph check for literal `net` and `net/http`, not runtime
+egress observation. It cannot see raw socket syscalls or an `os/exec` network
+child. A syscall-capable dependency requires manual syscall-behavior review on
+admission and every version bump; neither a pin nor an automatic update carries
+the earlier review forward.
+
 **Platform rule for Phase 3 items below:** each in-scope target owes **native** evidence
 on `linux/amd64` (ubuntu CI) and `darwin/arm64` (macos-14 CI). Ubuntu-only proof does
 not discharge macOS. Windows workspace commands remain `Unsupported`; `version`/`help`

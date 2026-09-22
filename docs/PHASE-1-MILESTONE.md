@@ -28,6 +28,12 @@ not the orchestrator's, and each is recorded in full in
 | 5 Unit tests do not substitute for the assembly proof | Satisfied | unchanged core tests |
 | 6 Zero network | Satisfied | `go list -deps`, no `net` import |
 
+**Evidence limit (Creed, H101-227):** item 6 is an import-graph result, not
+runtime proof. The gate checks literal `net` and `net/http` imports; raw socket
+syscalls and an `os/exec` network child are invisible without those imports.
+Syscall-capable dependencies require manual syscall-behavior review on admission
+and every version bump, rather than semver or automatic-update trust.
+
 ## What was built
 
 Three core command sets, each QA-accepted separately: the **task ledger** with acceptance

@@ -42,6 +42,15 @@ Continuous integration runs build, test, vet, and golangci-lint. Run `gofmt -w` 
 
 The installed product must not make implicit network calls. New dependencies, update checks, telemetry, network listeners, or agent-provider integrations require explicit review even if tests pass. Build-time dependency acquisition and user-configured agent egress must remain distinguishable from product runtime behavior.
 
+`scripts/check-no-network.sh` checks the production import graph for the literal
+paths `net` and `net/http`. It does not inspect behavior and cannot detect raw
+socket syscalls or an `os/exec` child such as `curl` when those imports are
+absent. Per Creed's H101-227 security review, admitting a syscall-capable
+dependency and every later version bump require the same manual review of its
+syscall behavior. Do not rely on semantic versioning or an automated dependency
+update to preserve that property: in Creed's words, “pin-and-forget silently
+erodes exactly this review.”
+
 ## Architecture decisions
 
 Follow the architecture decision record (ADR) process defined in [`docs/adr/0001-language-and-runtime.md`](docs/adr/0001-language-and-runtime.md). Do not restate or fork that process in an issue or pull request. Link the proposed or accepted ADR when a change affects a public contract, persistence or recovery, runtime or language, process ownership, security or egress, or supported distribution platforms.

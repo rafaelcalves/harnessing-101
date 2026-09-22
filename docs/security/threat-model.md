@@ -83,6 +83,12 @@ decided; that matrix itself is still open per ADR 0001.
 1. **No network client import in the core module.** Core package and transitive
    dependencies may not import `net`, `net/http`, or any third-party networking package.
    Checkable by `go list -deps` in CI — a diff of the dependency list, no judgment call.
+   **Gate limit (Creed, H101-227):** the shipped script checks only the literal import
+   paths `net` and `net/http`; it cannot detect raw socket syscalls or an `os/exec`
+   child such as `curl` when those paths are absent. Any syscall-capable dependency
+   needs manual syscall-behavior review on admission and on every version bump, not
+   semver trust or an automated update. The Phase 4 runtime observation above remains
+   the evidence needed for actual outbound attempts.
 2. **No telemetry, update-check, or crash-report call anywhere in the codebase.** Any
    outbound call outside the `ProcessSupervisor` adapter's documented child-spawn path is
    banned. Reviewer checks one yes/no: does this PR add a way to leave the process other

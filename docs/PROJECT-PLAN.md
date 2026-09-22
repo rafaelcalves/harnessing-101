@@ -34,6 +34,13 @@ These come from the project owner and are not open for the team to relitigate:
    [the threat model](security/threat-model.md), sections 4 and 5. No telemetry, no phone-home, no hosted service, no implicit network
    calls. If a user configures an agent that itself calls a model provider, that is the
    user's own configured egress, not ours — and it must be visible and opt-in.
+
+   **Evidence limit (Creed, H101-227):** `scripts/check-no-network.sh` enforces only
+   that the production dependency graph does not contain the literal import paths
+   `net` or `net/http`. It cannot see raw socket syscalls or a network tool launched
+   through `os/exec`. Any syscall-capable dependency must receive manual
+   syscall-behavior review when admitted and again on every version bump; pinning and
+   semantic-version trust do not replace that review.
 2. **Decoupled architecture.** The user interface is a replaceable adapter. Swapping the
    CLI for a GUI must not require touching the core. This is a structural requirement
    from day one, not a later refactor.

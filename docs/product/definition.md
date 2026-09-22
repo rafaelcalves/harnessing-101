@@ -63,6 +63,14 @@ Avoid sitcom names, character avatars, office-floor visuals, and borrowed slogan
 
 **INFERENCE — proposed README promise, contingent on implementation and verification:** “Harnessing 101 runs completely locally and makes no external connections itself; agents you configure may send content they can access to external services, and Harnessing 101 does not confine those agents or guarantee that your data stays on this machine.”
 
+**SECONDARY SOURCE — static-gate limit (Creed, H101-227):**
+`scripts/check-no-network.sh` rejects the literal production import paths `net`
+and `net/http`; it is not runtime egress observation. Raw socket syscalls and an
+`os/exec` child such as `curl` are invisible when those imports are absent.
+Admission and every version bump of a syscall-capable dependency therefore
+require manual syscall-behavior review, never semver-only or automatic-update
+trust.
+
 **SECONDARY SOURCE — design basis:** [Threat model, sections 2–4](../security/threat-model.md) separates controller traffic from agent traffic and identifies malicious workspace content as a way to influence an agent through its already-approved connection. This is a design review, not an observed incident. **CODE-PATH FACT:** none established for this proposed experience; there is no verified enforcement to advertise here.
 
 **INFERENCE — meaning for users:** local records and a controller that never connects externally are the promise. Protection against misleading instructions in messages, unrestricted agent file access, or disclosure through an approved provider is not. Provider approval is not approval of every later message, and origin information is not proof that content is safe. Do not describe the workspace as a confidentiality boundary or show a “safe” badge beside an approved profile.

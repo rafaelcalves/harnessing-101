@@ -21,6 +21,13 @@ it is not the current project or phase status.
 | 8 — Zero network | **SATISFIED** | [Phase 2 exit ruling](h101-112-phase2-item2-discharge-ruling.md#3-phase-2-exit) |
 | 9 — Test layering | **N/A** — policy; the required test layers are present | [Phase 2 exit ruling](h101-112-phase2-item2-discharge-ruling.md#3-phase-2-exit) |
 
+**Current limit on every “zero network” entry below (Creed, H101-227):** the
+discharged gate means `go list -deps` found no literal `net` or `net/http`
+production import. It is not runtime egress proof and cannot detect raw socket
+syscalls or an `os/exec` network child. A syscall-capable dependency requires
+manual syscall-behavior review on admission and every version bump; neither a
+pin, semantic versioning, nor an automated update carries that approval forward.
+
 ---
 
 Status: **Proposed**, Phase 0. Owner: Kelly (QA). Applies to all `H101-` cards.

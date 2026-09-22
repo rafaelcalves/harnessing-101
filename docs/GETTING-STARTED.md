@@ -518,6 +518,11 @@ getting-started.<random>/
 Harnessing 101 makes no product-initiated network connection. A real agent tool
 may connect to its configured provider and may send content it can read; you are
 responsible for that tool, its credentials, permissions, and destinations.
+The continuous-integration gate supporting the product-side claim checks only
+for production imports of `net` and `net/http`; as Creed's H101-227 security
+review records, it cannot see raw socket syscalls or an `os/exec` network child.
+Syscall-capable dependencies require manual syscall-behavior review both when
+admitted and on every version bump, not semver-only or automatic-update trust.
 
 ## How to read project status and limits
 

@@ -36,6 +36,12 @@ phase-exit ruling is
 | 8 Zero network | **Satisfied** | `548e3a3` (CI-guarded `go list -deps` check, not just a manual habit) |
 | 9 Test layering (engine unit tests do not substitute for the adapter-contract/subprocess proof, and vice versa) | **Not applicable** | Policy check, not a gap: engine unit tests, the `adaptercontract` suite, and the §2 subprocess walkthrough are all present and distinct, per the H101-112 ruling |
 
+**Evidence limit (Creed, H101-227):** item 8 proves only that the production
+dependency graph lacks literal `net` and `net/http` imports. It does not detect
+raw socket syscalls or an `os/exec` network child. Any syscall-capable dependency
+needs manual syscall-behavior review when admitted and on every version bump;
+pinning, semantic-version trust, and automated updates do not substitute for it.
+
 ## What was built
 
 A **shipped `harnessing` CLI** (`cmd/harnessing`) driving the full product cycle through

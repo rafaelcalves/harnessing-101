@@ -8,6 +8,14 @@ Status: **Accepted**. Decision date: **2026-09-19**. Decision-maker: **project o
 
 **SECONDARY SOURCE — exposure.** [Threat model §5](../security/threat-model.md#5-manual-start-exposure-in-phases-1-2-h101-11) establishes the design gap: agents in Phases 1–2 are started manually, outside the controller. The product has no process-start gate or enforced approval event for them. It cannot observe, attribute, or restrict those processes. Hostile task/message content can influence an agent to disclose readable data through its own external connection; the controller making no external connections does not prevent this path. This is a design finding, not evidence of an observed attack.
 
+**H101-228 evidence clarification (Creed, H101-227):** the shipped
+`check-no-network.sh` guard rejects literal production imports of `net` and
+`net/http`; it does not prove the controller cannot connect. Raw socket syscalls
+and an `os/exec` network child remain invisible without those imports.
+Syscall-capable dependencies require manual syscall-behavior review on admission
+and every version bump, not pin-and-forget, semantic-version, or automatic-update
+trust.
+
 **SECONDARY SOURCE — intended scope.** The [product definition](../product/definition.md) describes a bounded workflow with two manually started agents and one human. [ADR 0001](0001-language-and-runtime.md) and the [project plan](../PROJECT-PLAN.md) place product-managed process control in Phase 3. Origin fields in writable files do not authenticate their claimed author.
 
 ## Options considered
