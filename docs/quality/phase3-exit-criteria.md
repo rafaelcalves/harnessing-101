@@ -411,9 +411,17 @@ on reopen; **H101-185 unblocked** (one card). Ruling:
 
 **D2 SATISFIED** at `b764691` (`TestCLI_RunningDeadChildReconcilesToRecoveryRequired`,
 H101-184 B1–B4 + B5′, S2–S6 + S9). Layer A + reconcile expectation updates **sound**
-(H101-187 behaviour, not regression). **R8:** CI-only until both ADR targets green.
-**Item 4 still NOT SATISFIED** (D4 open). D4 bar before dispatch. Ruling:
+(H101-187 behaviour, not regression). **R8:** both ADR targets — CI SUCCESS on
+`b764691`. **Item 4 still NOT SATISFIED** (D4 open). Ruling:
 [`h101-188-phase3-item4-d2-discharge-ruling.md`](h101-188-phase3-item4-d2-discharge-ruling.md).
+
+### H101-189 — Item 4 D4 acceptance spec (2026-09-22)
+
+D4 engineering blocked until this spec lands. **Output-gap honesty** — behaviour
+decided in h101-128 lines 73/79; minimal journal + output read slice required.
+Producer: **D2 participate + pid sync** + fixture stdout lines (not
+`block_after_marker`). One card unless Stanley blocks journal under item 4. Full
+spec: [`h101-189-item4-d4-acceptance-spec.md`](h101-189-item4-d4-acceptance-spec.md).
 
 ---
 

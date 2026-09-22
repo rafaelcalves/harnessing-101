@@ -36,9 +36,9 @@ not stuck `Running`.
 | S6 graceful Close only | **Avoided** | controller SIGKILL |
 | S9 continuing-host reconcile | **Avoided** | post-crash fresh `harnessing run` subprocess |
 
-**S7 / R8:** recorded as **CI-only limit** — not claimed discharged here.
-Upgrade to satisfied on both ADR targets when ubuntu + macos-14 jobs green on
-`b764691`, same rule as H101-183.
+**S7 / R8:** **SATISFIED on both ADR targets** — upgraded 2026-09-22 (god
+`conv-fd16eb`). CI on `b764691` observed **SUCCESS** on ubuntu + macos-14.
+Same rule as H101-183 R8 upgrade.
 
 ---
 
