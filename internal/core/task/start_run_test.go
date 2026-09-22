@@ -270,3 +270,47 @@ func TestStartRun_DoesNotUpgradePreApprovalMessageProvenance(t *testing.T) {
 		t.Fatalf("pre-approval message IdentityVerification = %q after a successful StartRun; want it to remain %q (CF3)", msg.Provenance.IdentityVerification, domain.IdentityUnverified)
 	}
 }
+
+// TestStartRun_DispatchAttemptedEventReachesTheJournal closes a gap god
+// found in review: state-mutation coverage alone let a change that
+// dropped the RunDispatchAttempted event pass every existing test. This
+// asserts the actual event stream (Subscribe, the same journal a UI
+// consumes via H101-61) carries all three named events for one
+// StartRun call, in order — RunStarting, RunDispatchAttempted, and
+// RunStarted — so a future change that silently stops emitting the
+// marker event fails here even if the persisted Run state is untouched.
+func TestStartRun_DispatchAttemptedEventReachesTheJournal(t *testing.T) {
+	sup := &fakeSupervisor{}
+	e := newStartRunEngine(t, sup)
+	ctx := context.Background()
+	mustRegisterAndApprove(t, ctx, e, "agent-a", "profile-a")
+
+	snap, err := e.GetSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("GetSnapshot: %v", err)
+	}
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	events, err := e.Subscribe(subCtx, snap.Cursor)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+
+	if _, err := e.StartRun(ctx, CallerScope{AgentID: "agent-a"}, StartRunRequest{
+		RequestID: "r1", RunID: "run-1", AgentID: "agent-a", ProfileID: "profile-a",
+	}); err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	want := []string{"RunStarting", "RunDispatchAttempted", "RunStarted"}
+	for i, wantKind := range want {
+		select {
+		case ev := <-events:
+			if ev.Kind != wantKind {
+				t.Fatalf("event %d kind = %q, want %q", i, ev.Kind, wantKind)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timed out waiting for event %d (%q); journal is missing it", i, wantKind)
+		}
+	}
+}
