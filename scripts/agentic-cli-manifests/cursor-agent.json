@@ -1,25 +1,9 @@
 {
-  "schemaVersion": 1,
-  "tool": "Cursor Agent",
-  "executable": "cursor-agent",
-  "version": {"args": ["--version"], "successExitCodes": [0]},
-  "auth": {
-    "detectionMode": "runtime-output",
-    "requiredPatterns": ["login", "authenticate", "api key", "not logged in", "credentials"],
-    "networkRefusedPatterns": ["network is unreachable", "connection refused", "timed out"],
-    "notes": "Untested descriptor. Authentication detection is runtime-only until a documented local status command exists."
-  },
-  "invocation": {
-    "managedStart": {
-      "args": ["start-run", "-workspace", "{workspace}", "-workspace-id", "{workspace_id}", "-run", "{run_id}", "-agent", "{agent_id}", "-profile-id", "{profile_id}", "-task", "{task_id}"],
-      "contextMode": "profile-context"
-    }
-  },
-  "participation": {
-    "requiredSignals": ["task", "workspace", "participation"],
-    "completionSignals": ["cycle_completed", "acceptance_history", "ownership"],
-    "failureSignals": ["unsupported", "authentication", "network", "spawn"]
-  },
-  "humanInterventions": ["setup and assignment", "answer blocker", "reject once", "accept corrected result"],
-  "friction": ["descriptor not tested on this machine"]
+  "schemaVersion": 2,
+  "toolId": "cursor-agent",
+  "displayName": "Cursor Agent",
+  "descriptorRevision": "cursor-agent-owner-deferral-1",
+  "deferred": true,
+  "deferral": {"reason": "No documented and tested managed invocation/context binding is available for this target in H101-152.", "reference": "H101-154 owner deferral; replace only after owner supplies approved invocation evidence."},
+  "evidence": {"scenarioRef": "h101-147-full-cycle", "scenarioVersion": "1", "plannedInterventions": ["owner supplies approved invocation evidence"], "observationHints": []}
 }

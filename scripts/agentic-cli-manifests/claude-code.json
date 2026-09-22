@@ -1,25 +1,20 @@
 {
-  "schemaVersion": 1,
-  "tool": "Claude Code",
-  "executable": "claude",
-  "version": {"args": ["--version"], "successExitCodes": [0]},
-  "auth": {
-    "detectionMode": "runtime-output",
-    "requiredPatterns": ["login", "authenticate", "api key", "not logged in", "credentials"],
-    "networkRefusedPatterns": ["api.anthropic.com", "network is unreachable", "connection refused", "timed out"],
-    "notes": "Claude Code has no assumed non-authenticating provider probe here; classify auth/network failures from the first managed invocation. Never log tokens."
+  "schemaVersion": 2,
+  "toolId": "claude-code",
+  "displayName": "Claude Code",
+  "descriptorRevision": "claude-code-v2-proposal-1",
+  "deferred": false,
+  "toolSpec": {
+    "executable": {"lookup": "claude"},
+    "versionProbe": {"args": ["--version"], "acceptedExitCodes": [0], "timeoutSeconds": 30},
+    "invocation": {"args": [{"literal": "-p"}, {"contextSlot": "prompt"}], "ioMode": "noninteractive-stdio"},
+    "context": {"transport": "argument", "formatVersion": "h101-agent-context-v1", "encoding": "utf-8", "allowedSlots": ["prompt"], "requiredFields": ["workspace_id", "task_id", "agent_id", "peer_id", "run_id"]},
+    "authentication": {"strategy": "runtime-diagnostic-hints", "notes": "No login or credential command is run by the runner."},
+    "diagnostics": {"hints": [
+      {"code": "claude-auth", "source": "stderr", "matching": "substring", "pattern": "not logged in", "classification": "authentication_required"},
+      {"code": "claude-network", "source": "stderr", "matching": "substring", "pattern": "api.anthropic.com", "classification": "network_egress_refused"},
+      {"code": "claude-unsupported", "source": "stderr", "matching": "substring", "pattern": "unknown option", "classification": "unsupported_invocation"}
+    ]}
   },
-  "invocation": {
-    "managedStart": {
-      "args": ["start-run", "-workspace", "{workspace}", "-workspace-id", "{workspace_id}", "-run", "{run_id}", "-agent", "{agent_id}", "-profile-id", "{profile_id}", "-task", "{task_id}"],
-      "contextMode": "profile-context"
-    }
-  },
-  "participation": {
-    "requiredSignals": ["task", "workspace", "participation"],
-    "completionSignals": ["cycle_completed", "acceptance_history", "ownership"],
-    "failureSignals": ["unsupported", "authentication", "network", "spawn"]
-  },
-  "humanInterventions": ["setup and assignment", "answer blocker", "reject once", "accept corrected result"],
-  "friction": ["provider authentication and network reachability are owner/environment responsibilities"]
+  "evidence": {"scenarioRef": "h101-147-full-cycle", "scenarioVersion": "1", "plannedInterventions": ["setup and assignment", "answer blocker", "reject once", "accept corrected result"], "observationHints": ["Record product task/message/result records; tool output cannot prove completion."]}
 }

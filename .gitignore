@@ -12,3 +12,6 @@
 *.swp
 .idea/
 .vscode/
+
+# built binary from the Layer B owner-run command
+/harnessing

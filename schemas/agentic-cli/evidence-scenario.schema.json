@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Harnessing Layer B evidence scenario v1",
+  "type": "object",
+  "required": ["scenarioRef", "scenarioVersion", "assertions"],
+  "properties": {
+    "scenarioRef": {"const": "h101-147-full-cycle"},
+    "scenarioVersion": {"const": "1"},
+    "assertions": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+  }
+}
