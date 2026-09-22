@@ -359,7 +359,7 @@ increment only. Four new tests PASS under `-race` (`make build test vet lint fmt
 | Stanley E# / row | Verdict |
 | --- | --- |
 | E1 reconcile before admit | **SATISFIED** |
-| E2 `RecoveryRequired` through product (CLI) | **NOT SATISFIED** |
+| E2 `RecoveryRequired` through product (CLI) | **SATISFIED** at `21c782e` (H101-183) |
 | E3 same-agent refuse, no child | **SATISFIED** |
 | E4 persist across reopen | **SATISFIED** |
 | E5 unrelated agent eligible | **SATISFIED** |
@@ -368,7 +368,7 @@ increment only. Four new tests PASS under `-race` (`make build test vet lint fmt
 | D3 surface `RecoveryRequired` | **Partial** (stuck-`Starting` at reopen) |
 | D4 output gaps | **Open** |
 | D5 unclean crash test | **SATISFIED** (native SIGKILL window) |
-| D6 CLI not host query | **Open** |
+| D6 CLI not host query | **SATISFIED** at `21c782e` (H101-183) |
 
 Kevin's non-claims (no live supervision, adoption, termination, output continuity, item 4
 acceptance) are **correctly scoped**. Defensive Succeeded-operation guard:
@@ -383,6 +383,13 @@ H101-181 blocked until this spec lands. **`harnessing run`** subprocess must sho
 `crash_reconcile_native_test.go`; crash via `harnessing start-run` + fixture sync
 line + SIGKILL). Decision table R1–R9. Full spec:
 [`h101-182-item4-e2-d6-acceptance-spec.md`](h101-182-item4-e2-d6-acceptance-spec.md).
+
+### H101-183 — Item 4 E2/D6 discharged (2026-09-22)
+
+**E2 SATISFIED. D6 SATISFIED** at `21c782e` (`TestCLI_RecoveryRequiredAfterRealStartRunCrash`,
+H101-182 A1–A5, R3–R7). Both ADR targets via CI job pattern when green; local verify
+darwin/arm64 this session. **Item 4 still NOT SATISFIED** (D2, D4 open). Ruling:
+[`h101-183-phase3-item4-e2-d6-discharge-ruling.md`](h101-183-phase3-item4-e2-d6-discharge-ruling.md).
 
 ---
 
