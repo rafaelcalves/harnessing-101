@@ -376,6 +376,14 @@ acceptance) are **correctly scoped**. Defensive Succeeded-operation guard:
 correctly avoided. Full ruling:
 [`h101-180-phase3-item4-minimal-slice-ruling.md`](h101-180-phase3-item4-minimal-slice-ruling.md).
 
+### H101-182 — Item 4 E2/D6 acceptance spec (2026-09-22)
+
+H101-181 blocked until this spec lands. **`harnessing run`** subprocess must show
+`State:      RecoveryRequired` after the H101-161 crash window (same semantics as
+`crash_reconcile_native_test.go`; crash via `harnessing start-run` + fixture sync
+line + SIGKILL). Decision table R1–R9. Full spec:
+[`h101-182-item4-e2-d6-acceptance-spec.md`](h101-182-item4-e2-d6-acceptance-spec.md).
+
 ---
 
 ### Item 5 — Real run output journal
