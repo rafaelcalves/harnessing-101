@@ -2,19 +2,12 @@
   "schemaVersion": 2,
   "toolId": "claude-code",
   "displayName": "Claude Code",
-  "descriptorRevision": "claude-code-v2-proposal-1",
-  "deferred": false,
-  "toolSpec": {
-    "executable": {"lookup": "claude"},
-    "versionProbe": {"args": ["--version"], "acceptedExitCodes": [0], "timeoutSeconds": 30},
-    "invocation": {"args": [{"literal": "-p"}, {"contextSlot": "prompt"}], "ioMode": "noninteractive-stdio"},
-    "context": {"transport": "argument", "formatVersion": "h101-agent-context-v1", "encoding": "utf-8", "allowedSlots": ["prompt"], "requiredFields": ["workspace_id", "task_id", "agent_id", "peer_id", "run_id"]},
-    "authentication": {"strategy": "runtime-diagnostic-hints", "notes": "No login or credential command is run by the runner."},
-    "diagnostics": {"hints": [
-      {"code": "claude-auth", "source": "stderr", "matching": "substring", "pattern": "not logged in", "classification": "authentication_required"},
-      {"code": "claude-network", "source": "stderr", "matching": "substring", "pattern": "api.anthropic.com", "classification": "network_egress_refused"},
-      {"code": "claude-unsupported", "source": "stderr", "matching": "substring", "pattern": "unknown option", "classification": "unsupported_invocation"}
-    ]}
+  "descriptorRevision": "claude-code-owner-deferral-1",
+  "deferred": true,
+  "deferral": {
+    "reason": "managed StartRun deferred by owner H101-174",
+    "reference": "H101-174 attachment-first (A); managed launch (B) on backlog",
+    "backlog": {"track": "managed_start_run", "nearTerm": true, "reopensWhen": "runner-produced manifest per H101-153"}
   },
-  "evidence": {"scenarioRef": "h101-147-full-cycle", "scenarioVersion": "1", "plannedInterventions": ["setup and assignment", "answer blocker", "reject once", "accept corrected result"], "observationHints": ["Record product task/message/result records; tool output cannot prove completion."]}
+  "evidence": {"scenarioRef": "h101-147-full-cycle", "scenarioVersion": "1", "plannedInterventions": ["owner supplies approved invocation evidence"], "observationHints": []}
 }

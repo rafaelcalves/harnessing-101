@@ -9,7 +9,7 @@
     "displayName": {"type": "string", "minLength": 1},
     "descriptorRevision": {"type": "string", "minLength": 1},
     "deferred": {"type": "boolean"},
-    "deferral": {"type": "object", "required": ["reason", "reference"], "properties": {"reason": {"type": "string"}, "reference": {"type": "string"}}},
+    "deferral": {"type": "object", "required": ["reason", "reference"], "properties": {"reason": {"type": "string"}, "reference": {"type": "string"}, "backlog": {"type": "object", "required": ["track", "nearTerm", "reopensWhen"], "properties": {"track": {"type": "string", "minLength": 1}, "nearTerm": {"type": "boolean"}, "reopensWhen": {"type": "string", "minLength": 1}}}}},
     "toolSpec": {"$ref": "#/$defs/toolSpec"},
     "evidence": {"type": "object", "required": ["scenarioRef", "scenarioVersion", "plannedInterventions"], "properties": {"scenarioRef": {"type": "string"}, "scenarioVersion": {"type": "string"}, "plannedInterventions": {"type": "array", "minItems": 1, "items": {"type": "string"}}, "observationHints": {"type": "array", "items": {"type": "string"}}}}
   },
